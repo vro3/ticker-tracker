@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ticker Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --page: #0d0d0d; --surface: #1a1a19; --surface-2: #232322; --line: #2e2e2c;
+    --ink: #ffffff; --ink-2: #c3c2b7; --ink-3: #8a897f;
+    --up: #2fbf71; --up-soft: rgba(47,191,113,.16);
+    --down: #e5484d; --down-soft: rgba(229,72,77,.16);
+    --neutral: #6f6e66; --accent: #3987e5; --warn: #fab219;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--page); color: var(--ink); font-family: Inter, -apple-system, system-ui, sans-serif; font-size: 15px; line-height: 1.4; }
+  .mono { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; font-variant-numeric: tabular-nums; }
+  a { color: inherit; }
+  header { padding: 28px 28px 8px; display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+  header .sub { color: var(--ink-3); font-size: 13px; }
+  header .spacer { flex: 1; }
+  .btn { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 13px; cursor: pointer; }
+  .btn:hover { color: var(--ink); border-color: var(--ink-3); }
+  .btn.on { background: var(--ink); color: var(--page); border-color: var(--ink); }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; padding: 12px 28px; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+  .tile .k { color: var(--ink-3); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  .tile .v { font-size: 26px; font-weight: 700; margin-top: 4px; letter-spacing: -.02em; }
+  .tile .v.up { color: var(--up); } .tile .v.down { color: var(--down); }
+
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; padding: 8px 28px 4px; align-items: center; }
+  .filters .label { color: var(--ink-3); font-size: 12px; margin-right: 4px; }
+
+  .board { padding: 8px 28px; }
+  .board table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+  .board th, .board td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--line); font-size: 14px; }
+  .board th { color: var(--ink-3); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  .board tr:last-child td { border-bottom: 0; }
+  .board td.num { text-align: right; }
+  .board th.num { text-align: right; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px; padding: 16px 28px 48px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 18px 14px; display: flex; flex-direction: column; gap: 12px; position: relative; }
+  .card.review { border-color: var(--warn); }
+  .who { display: flex; align-items: center; gap: 10px; }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 14px; color: var(--page); flex: none; }
+  .who .name { font-weight: 600; }
+  .who .when { color: var(--ink-3); font-size: 12px; }
+  .who .spacer { flex: 1; }
+  .pill { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding: 4px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-2); display: inline-flex; align-items: center; gap: 5px; }
+  .pill.hit { color: var(--up); border-color: var(--up); background: var(--up-soft); }
+  .pill.miss { color: var(--down); border-color: var(--down); background: var(--down-soft); }
+  .pill.pending { color: var(--ink-2); }
+  .pill.no_call { color: var(--ink-3); }
+  .pill.review { color: var(--warn); border-color: var(--warn); }
+
+  .head { display: flex; align-items: flex-start; gap: 14px; }
+  .thumb { width: 64px; height: 92px; border-radius: 8px; object-fit: cover; object-position: top; border: 1px solid var(--line); cursor: zoom-in; background: var(--surface-2); flex: none; }
+  .thumb.empty { display: grid; place-items: center; color: var(--ink-3); font-size: 11px; cursor: default; }
+  .tk { font-size: 28px; font-weight: 700; letter-spacing: -.02em; line-height: 1; }
+  .co { color: var(--ink-3); font-size: 13px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
+  .prices { display: flex; gap: 14px; align-items: baseline; margin-top: 8px; flex-wrap: wrap; }
+  .prices .p { font-size: 15px; }
+  .prices .p small { color: var(--ink-3); font-size: 11px; display: block; text-transform: uppercase; letter-spacing: .06em; }
+  .pct { font-weight: 700; font-size: 20px; }
+  .pct.up { color: var(--up); } .pct.down { color: var(--down); } .pct.flat { color: var(--ink-2); }
+
+  .note { background: var(--surface-2); border-radius: 10px; padding: 10px 12px; font-size: 14px; color: var(--ink-2); border-left: 3px solid var(--accent); }
+  .note .goal { color: var(--ink); }
+  .note .raw { color: var(--ink-3); font-size: 12px; margin-top: 4px; font-style: italic; }
+  .why { color: var(--ink-3); font-size: 12px; }
+
+  .chart { position: relative; height: 120px; }
+  .chart svg { width: 100%; height: 100%; display: block; overflow: visible; }
+  .chart .tip { position: absolute; pointer-events: none; background: var(--page); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; font-size: 12px; color: var(--ink); white-space: nowrap; transform: translate(-50%, -110%); display: none; z-index: 2; }
+  .chart .axis { fill: var(--ink-3); font-size: 10px; font-family: "JetBrains Mono", monospace; }
+  .empty-chart { color: var(--ink-3); font-size: 12px; display: grid; place-items: center; height: 100%; }
+
+  .fix { display: flex; gap: 6px; align-items: center; }
+  .fix input { background: var(--page); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; font: inherit; width: 90px; text-transform: uppercase; }
+  .fix button { font-size: 12px; padding: 5px 10px; }
+  .card .menu { position: absolute; top: 12px; right: 12px; opacity: 0; transition: opacity .15s; }
+  .card:hover .menu { opacity: 1; }
+  .menu button { background: none; border: 0; color: var(--ink-3); cursor: pointer; font-size: 16px; padding: 4px; }
+  .menu button:hover { color: var(--down); }
+
+  .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; place-items: center; z-index: 10; cursor: zoom-out; }
+  .lightbox img { max-height: 92vh; max-width: 92vw; border-radius: 12px; }
+  .empty { padding: 60px 28px; text-align: center; color: var(--ink-3); }
+  .empty b { color: var(--ink); display: block; font-size: 18px; margin-bottom: 8px; }
+  footer { color: var(--ink-3); font-size: 12px; padding: 0 28px 28px; }
+  @media (max-width: 640px) { header, .tiles, .filters, .board, .grid, footer { padding-left: 14px; padding-right: 14px; } .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ticker Tracker</h1>
+  <span class="sub" id="asof"></span>
+  <span class="spacer"></span>
+  <button class="btn" id="refresh">Refresh prices</button>
+</header>
+
+<div class="tiles" id="tiles"></div>
+
+<div class="filters" id="filters"></div>
+<div class="filters" id="sorts"></div>
+
+<div class="board" id="board"></div>
+<div class="grid" id="grid"></div>
+<div class="empty" id="empty" hidden><b>Nothing here yet.</b>Text a screenshot to the group and it will show up within a minute or two.</div>
+<footer>Bars are daily closes since the day it was sent, colored against the price in the screenshot. "Bought that day" math uses the screenshot price when one is visible, otherwise that day's close.</footer>
+<div class="lightbox" id="lightbox"><img id="lightimg" alt=""></div>
+
+<script>
+const PALETTE = ["#3987e5", "#e8a33d", "#c96bd6", "#2fbf71", "#e5484d", "#4ec9c9", "#b8b26a", "#8b8b8b"];
+let DATA = null, personFilter = "all", sortBy = "recent";
+
+const fmtMoney = (v, cur) => v == null ? "—" : (cur && cur !== "USD" ? cur + " " : "$") + v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const fmtPct = v => v == null ? "—" : (v > 0 ? "+" : "") + v.toFixed(1) + "%";
+const pctClass = v => v == null ? "flat" : v > 0.05 ? "up" : v < -0.05 ? "down" : "flat";
+const ago = iso => { const d = (Date.now() - new Date(iso)) / 864e5; if (d < 1) return "today"; if (d < 2) return "yesterday"; return Math.floor(d) + " days ago"; };
+const whenText = iso => { const d = new Date(iso); return d.toLocaleDateString(undefined, {month: "short", day: "numeric"}) + " · " + d.toLocaleTimeString(undefined, {hour: "numeric", minute: "2-digit"}); };
+const colorFor = (name, people) => PALETTE[Math.max(0, people.findIndex(p => p.name === name)) % PALETTE.length];
+const esc = s => (s ?? "").toString().replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+async function load() {
+  const r = await fetch("/api/data"); DATA = await r.json(); render();
+}
+
+function render() {
+  const {summary, people, submissions} = DATA;
+  const peopleByName = people.slice().sort((a, b) => a.name.localeCompare(b.name));
+  document.getElementById("asof").textContent = summary.last_price_refresh ? "prices as of " + new Date(summary.last_price_refresh).toLocaleString() : "";
+  document.getElementById("tiles").innerHTML = [
+    tile("Ideas sent", summary.count), tile("Tickers", summary.tickers),
+    tile("Avg since sent", fmtPct(summary.avg_pct), pctClass(summary.avg_pct)),
+    tile("Calls hit", summary.hits, "up"), tile("Calls missed", summary.misses, "down"),
+    summary.needs_review ? tile("Needs a look", summary.needs_review) : "",
+  ].join("");
+
+  document.getElementById("filters").innerHTML = '<span class="label">Who</span>' +
+    ['all', ...peopleByName.map(p => p.name)].map(n => `<button class="btn ${personFilter === n ? "on" : ""}" data-p="${esc(n)}">${n === "all" ? "Everyone" : esc(n)}</button>`).join("");
+  document.querySelectorAll("#filters [data-p]").forEach(b => b.onclick = () => { personFilter = b.dataset.p; render(); });
+  const sorts = [["recent", "Newest"], ["best", "Best"], ["worst", "Worst"], ["ticker", "Ticker"]];
+  document.getElementById("sorts").innerHTML = '<span class="label">Sort</span>' + sorts.map(([k, l]) => `<button class="btn ${sortBy === k ? "on" : ""}" data-s="${k}">${l}</button>`).join("");
+  document.querySelectorAll("#sorts [data-s]").forEach(b => b.onclick = () => { sortBy = b.dataset.s; render(); });
+
+  document.getElementById("board").innerHTML = people.length < 2 ? "" : `<table>
+    <tr><th>Person</th><th class="num">Ideas</th><th class="num">Avg since sent</th><th class="num">Best</th><th class="num">Hit</th><th class="num">Miss</th><th class="num">Pending</th></tr>
+    ${people.map(p => `<tr><td><span class="avatar" style="display:inline-grid;width:22px;height:22px;font-size:11px;background:${colorFor(p.name, peopleByName)};vertical-align:middle;margin-right:8px">${esc(p.name[0])}</span>${esc(p.name)}</td>
+      <td class="num mono">${p.count}</td><td class="num mono pct ${pctClass(p.avg_pct)}" style="font-size:14px">${fmtPct(p.avg_pct)}</td>
+      <td class="num mono">${fmtPct(p.best)}</td><td class="num mono">${p.hit}</td><td class="num mono">${p.miss}</td><td class="num mono">${p.pending}</td></tr>`).join("")}
+  </table>`;
+
+  let subs = submissions.filter(s => personFilter === "all" || s.sender_name === personFilter);
+  const key = {recent: s => -new Date(s.sent_at), best: s => -(s.pct ?? -1e9), worst: s => (s.pct ?? 1e9), ticker: s => s.ticker || "zzz"}[sortBy];
+  subs.sort((a, b) => key(a) > key(b) ? 1 : key(a) < key(b) ? -1 : 0);
+  document.getElementById("empty").hidden = subs.length > 0;
+  const grid = document.getElementById("grid");
+  grid.innerHTML = subs.map(s => card(s, peopleByName)).join("");
+  subs.forEach(s => drawChart(s));
+  grid.querySelectorAll(".thumb[data-src]").forEach(img => img.onclick = () => { document.getElementById("lightimg").src = img.dataset.src; document.getElementById("lightbox").style.display = "grid"; });
+  grid.querySelectorAll(".fix button").forEach(b => b.onclick = async () => {
+    const id = b.dataset.id, v = b.parentElement.querySelector("input").value.trim();
+    if (!v) return; b.disabled = true;
+    await fetch(`/api/submissions/${id}`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({ticker: v})});
+    load();
+  });
+  grid.querySelectorAll(".menu button").forEach(b => b.onclick = async () => {
+    if (!confirm("Remove this entry?")) return;
+    await fetch(`/api/submissions/${b.dataset.id}`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({delete: true})});
+    load();
+  });
+}
+
+const tile = (k, v, cls = "") => `<div class="tile"><div class="k">${k}</div><div class="v ${cls}">${v ?? "—"}</div></div>`;
+
+function card(s, people) {
+  const review = s.status !== "ok";
+  const verdict = review ? `<span class="pill review">Needs a look</span>` :
+    s.verdict === "hit" ? `<span class="pill hit">✓ Called it</span>` :
+    s.verdict === "miss" ? `<span class="pill miss">✗ Missed</span>` :
+    s.verdict === "no_call" ? `<span class="pill no_call">Watching</span>` : `<span class="pill pending">Pending</span>`;
+  const base = s.base_price, now = s.latest_price;
+  const goal = s.goal ? `<div class="goal">${esc(s.goal)}</div>` : `<div class="goal" style="color:var(--ink-3)">No note sent</div>`;
+  const raw = s.note && s.note !== s.goal ? `<div class="raw">“${esc(s.note)}”</div>` : "";
+  const fix = review ? `<div class="fix"><span class="why">${esc(s.error || "Couldn't read the ticker confidently.")} Set it:</span><input placeholder="TICKER" value="${esc(s.ticker || "")}"><button class="btn" data-id="${s.id}">Save</button></div>` : "";
+  const thumb = s.screenshot ? `<img class="thumb" src="/screenshots/${esc(s.screenshot)}" data-src="/screenshots/${esc(s.screenshot)}" alt="screenshot">` : `<div class="thumb empty">text only</div>`;
+  return `<div class="card ${review ? "review" : ""}" id="card-${s.id}">
+    <div class="menu"><button data-id="${s.id}" title="Remove">✕</button></div>
+    <div class="who"><div class="avatar" style="background:${colorFor(s.sender_name, people)}">${esc(s.sender_name[0])}</div>
+      <div><div class="name">${esc(s.sender_name)}</div><div class="when">${whenText(s.sent_at)} · ${ago(s.sent_at)}</div></div><span class="spacer"></span>${verdict}</div>
+    <div class="head">${thumb}<div style="min-width:0;flex:1">
+      <div class="tk">${esc(s.ticker || "?")}</div><div class="co">${esc(s.company || "")}</div>
+      <div class="prices">
+        <div class="p mono"><small>When sent</small>${fmtMoney(base, s.currency)}</div>
+        <div class="p mono"><small>Now</small>${fmtMoney(now, s.currency)}</div>
+        <div class="pct mono ${pctClass(s.pct)}">${fmtPct(s.pct)}</div>
+      </div></div></div>
+    <div class="note">${goal}${raw}</div>
+    ${s.reasoning && !review ? `<div class="why">${esc(s.reasoning)}</div>` : ""}
+    <div class="chart" id="chart-${s.id}"><div class="tip"></div></div>
+    ${fix}
+  </div>`;
+}
+
+function drawChart(s) {
+  const el = document.getElementById(`chart-${s.id}`);
+  const series = s.series || [], base = s.base_price;
+  if (!series.length || base == null) { el.innerHTML = `<div class="empty-chart">${s.ticker ? "No closes yet — first bar appears after the next market close." : ""}</div>`; return; }
+  const W = el.clientWidth || 340, H = 120, padL = 44, padB = 16, padT = 6;
+  const iw = W - padL, ih = H - padB - padT;
+  const vals = series.map(d => d.close);
+  const lo = Math.min(...vals, base), hi = Math.max(...vals, base);
+  const span = (hi - lo) || base * 0.02;
+  const y = v => padT + ih - ((v - (lo - span * 0.08)) / (span * 1.16)) * ih;
+  const n = series.length, slot = iw / n, bw = Math.max(2, Math.min(10, slot - 2));
+  const baseY = y(base);
+  let bars = series.map((d, i) => {
+    const x = padL + i * slot + (slot - bw) / 2, yy = y(d.close);
+    const up = d.close >= base, top = Math.min(yy, baseY), h = Math.max(1, Math.abs(yy - baseY));
+    return `<rect x="${x.toFixed(1)}" y="${top.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${up ? "var(--up)" : "var(--down)"}" data-i="${i}"></rect>`;
+  }).join("");
+  const tickVals = [lo, base, hi].filter((v, i, a) => a.findIndex(o => Math.abs(y(o) - y(v)) < 12) === i);
+  const ticks = tickVals.map(v => `<text class="axis" x="${padL - 6}" y="${(y(v) + 3).toFixed(1)}" text-anchor="end">${v >= 1000 ? Math.round(v) : v.toFixed(v < 10 ? 2 : 1)}</text>`).join("");
+  const first = series[0].date.slice(5), last = series[n - 1].date.slice(5);
+  el.innerHTML = `<div class="tip"></div><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
+    <line x1="${padL}" x2="${W}" y1="${baseY.toFixed(1)}" y2="${baseY.toFixed(1)}" stroke="var(--ink-3)" stroke-dasharray="3 3" stroke-width="1"></line>
+    ${bars}${ticks}
+    <text class="axis" x="${padL}" y="${H - 3}">${first}</text><text class="axis" x="${W}" y="${H - 3}" text-anchor="end">${last}</text>
+  </svg>`;
+  const tip = el.querySelector(".tip"), svg = el.querySelector("svg");
+  svg.addEventListener("mousemove", e => {
+    const r = svg.getBoundingClientRect(); const i = Math.max(0, Math.min(n - 1, Math.floor((e.clientX - r.left - padL * r.width / W) / (slot * r.width / W))));
+    const d = series[i]; if (!d) return;
+    const pct = (d.close - base) / base * 100;
+    tip.innerHTML = `<b>${d.date}</b> &nbsp;<span class="mono">${fmtMoney(d.close, s.currency)}</span> <span class="${pctClass(pct)}" style="color:var(${pct >= 0 ? "--up" : "--down"})">${fmtPct(pct)}</span>`;
+    tip.style.left = (padL + i * slot + slot / 2) * r.width / W + "px"; tip.style.top = y(d.close) * r.height / H + "px"; tip.style.display = "block";
+  });
+  svg.addEventListener("mouseleave", () => tip.style.display = "none");
+}
+
+document.getElementById("lightbox").onclick = () => document.getElementById("lightbox").style.display = "none";
+document.getElementById("refresh").onclick = async e => { e.target.disabled = true; e.target.textContent = "Refreshing…"; await fetch("/api/refresh", {method: "POST"}); await load(); e.target.disabled = false; e.target.textContent = "Refresh prices"; };
+load(); setInterval(load, 60000);
+let rt; window.addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => DATA && render(), 150); });
+</script>
+</body>
+</html>

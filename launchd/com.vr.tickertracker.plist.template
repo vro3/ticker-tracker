@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.vr.tickertracker</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__PYTHON__</string>
+    <string>-m</string>
+    <string>tracker</string>
+    <string>run</string>
+  </array>
+  <key>WorkingDirectory</key><string>__PROJECT__</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:__HOME__/.local/bin</string>
+    <key>HOME</key><string>__HOME__</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>15</integer>
+  <key>StandardOutPath</key><string>__HOME__/TickerTracker/launchd.out.log</string>
+  <key>StandardErrorPath</key><string>__HOME__/TickerTracker/launchd.err.log</string>
+</dict>
+</plist>
