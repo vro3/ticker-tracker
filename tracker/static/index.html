@@ -93,6 +93,26 @@
   .lightbox img { max-height: 92vh; max-width: 92vw; border-radius: 12px; }
   .empty { padding: 60px 28px; text-align: center; color: var(--ink-3); }
   .empty b { color: var(--ink); display: block; font-size: 18px; margin-bottom: 8px; }
+
+  .master { margin: 8px 28px 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px 12px; }
+  .master .top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  .master h2 { margin: 0; font-size: 15px; font-weight: 600; }
+  .master .top .spacer { flex: 1; }
+  .legend { display: flex; gap: 6px 14px; flex-wrap: wrap; margin: 6px 0 4px; }
+  .legend .item { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-2); cursor: pointer; user-select: none; padding: 2px 4px; border-radius: 6px; }
+  .legend .item.off { opacity: .35; }
+  .legend .item:hover { background: var(--surface-2); }
+  .legend .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .mchart { position: relative; height: 340px; }
+  .mchart svg { width: 100%; height: 100%; display: block; overflow: visible; }
+  .mchart .tip { position: absolute; pointer-events: none; background: var(--page); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px; color: var(--ink); white-space: nowrap; display: none; z-index: 2; }
+  .mchart .tip .row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+  .mchart .tip .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+  .mchart .grid-line { stroke: var(--line); stroke-width: 1; }
+  .mchart .axis { fill: var(--ink-3); font-size: 11px; font-family: "JetBrains Mono", monospace; }
+  .mchart path.series { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .mchart path.series.dim { opacity: .18; }
+  @media (max-width: 640px) { .master { margin-left: 14px; margin-right: 14px; } .mchart { height: 260px; } }
   footer { color: var(--ink-3); font-size: 12px; padding: 0 28px 28px; }
   @media (max-width: 640px) { header, .tiles, .filters, .board, .grid, footer { padding-left: 14px; padding-right: 14px; } .grid { grid-template-columns: 1fr; } }
 </style>
@@ -111,6 +131,12 @@
 <div class="filters" id="sorts"></div>
 
 <div class="board" id="board"></div>
+<div class="master" id="master">
+  <div class="top"><h2>Everything, daily closes</h2><span class="sub" style="color:var(--ink-3);font-size:12px">one line per ticker, starting the day it was first sent</span><span class="spacer"></span>
+    <button class="btn on" data-m="price">Price</button><button class="btn" data-m="pct">% since sent</button></div>
+  <div class="legend" id="legend"></div>
+  <div class="mchart" id="mchart"><div class="tip"></div></div>
+</div>
 <div class="grid" id="grid"></div>
 <div class="empty" id="empty" hidden><b>Nothing here yet.</b>Text a screenshot to the group and it will show up within a minute or two.</div>
 <footer>Bars are daily closes since the day it was sent, colored against the price in the screenshot. "Bought that day" math uses the screenshot price when one is visible, otherwise that day's close.</footer>
@@ -163,6 +189,7 @@ function render() {
   document.getElementById("empty").hidden = subs.length > 0;
   const grid = document.getElementById("grid");
   grid.innerHTML = subs.map(s => card(s, peopleByName)).join("");
+  drawMaster();
   subs.forEach(s => drawChart(s));
   grid.querySelectorAll(".thumb[data-src]").forEach(img => img.onclick = () => { document.getElementById("lightimg").src = img.dataset.src; document.getElementById("lightbox").style.display = "grid"; });
   grid.querySelectorAll(".fix button").forEach(b => b.onclick = async () => {
@@ -176,6 +203,76 @@ function render() {
     await fetch(`/api/submissions/${b.dataset.id}`, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({delete: true})});
     load();
   });
+}
+
+
+// ---------- master chart ----------
+const SERIES_COLORS = ["#3987e5", "#e8a33d", "#c96bd6", "#2fbf71", "#e5484d", "#4ec9c9", "#d4c95a", "#f08cb0", "#7fa8ff", "#b48a5c", "#8fd48f", "#cc7f5a"];
+let masterMode = "price", hidden = new Set();
+document.querySelectorAll("#master [data-m]").forEach(b => b.onclick = () => { masterMode = b.dataset.m; document.querySelectorAll("#master [data-m]").forEach(x => x.classList.toggle("on", x === b)); drawMaster(); });
+
+function masterSeries() {
+  const byTk = {};
+  for (const s of DATA.submissions) {
+    if (!s.ticker || !s.series || !s.series.length) continue;
+    const cur = byTk[s.ticker];
+    if (!cur || s.sent_date < cur.sent_date) byTk[s.ticker] = {ticker: s.ticker, sent_date: s.sent_date, base: s.base_price, series: s.series, who: s.sender_name};
+  }
+  return Object.values(byTk).sort((a, b) => a.sent_date < b.sent_date ? -1 : 1);
+}
+
+function drawMaster() {
+  const all = masterSeries();
+  const wrap = document.getElementById("master");
+  wrap.hidden = all.length === 0;
+  if (!all.length) return;
+  all.forEach((t, i) => t.color = SERIES_COLORS[i % SERIES_COLORS.length]);
+  document.getElementById("legend").innerHTML = all.map(t => `<span class="item ${hidden.has(t.ticker) ? "off" : ""}" data-t="${t.ticker}"><span class="dot" style="background:${t.color}"></span>${t.ticker}<span style="color:var(--ink-3)"> · ${esc(t.who)}</span></span>`).join("");
+  document.querySelectorAll("#legend .item").forEach(el => el.onclick = () => { const t = el.dataset.t; hidden.has(t) ? hidden.delete(t) : hidden.add(t); drawMaster(); });
+  const shown = all.filter(t => !hidden.has(t.ticker));
+  const el = document.getElementById("mchart");
+  const W = el.clientWidth || 800, H = el.clientHeight || 340, padL = 56, padR = 16, padT = 12, padB = 26;
+  const iw = W - padL - padR, ih = H - padT - padB;
+  const val = (t, d) => masterMode === "pct" ? (d.close - t.base) / t.base * 100 : d.close;
+  const dates = [...new Set(all.flatMap(t => t.series.map(d => d.date)))].sort();
+  const x0 = new Date(dates[0]), x1 = new Date(dates[dates.length - 1]);
+  const xspan = Math.max(1, x1 - x0);
+  const xOf = d => padL + ((new Date(d) - x0) / xspan) * iw;
+  let vals = shown.flatMap(t => t.series.map(d => val(t, d)));
+  if (masterMode === "pct") vals.push(0);
+  if (!vals.length) vals = [0, 1];
+  let lo = Math.min(...vals), hi = Math.max(...vals); const pad = (hi - lo || 1) * 0.06; lo -= pad; hi += pad;
+  const yOf = v => padT + ih - ((v - lo) / (hi - lo)) * ih;
+  const fmtY = v => masterMode === "pct" ? (v > 0 ? "+" : "") + v.toFixed(0) + "%" : (v >= 1000 ? v.toFixed(0) : v.toFixed(v < 10 ? 2 : 1));
+  const ticksY = 5, gridY = [];
+  for (let i = 0; i <= ticksY; i++) { const v = lo + (hi - lo) * i / ticksY; gridY.push(`<line class="grid-line" x1="${padL}" x2="${W - padR}" y1="${yOf(v).toFixed(1)}" y2="${yOf(v).toFixed(1)}"></line><text class="axis" x="${padL - 8}" y="${(yOf(v) + 4).toFixed(1)}" text-anchor="end">${fmtY(v)}</text>`); }
+  const zero = masterMode === "pct" ? `<line x1="${padL}" x2="${W - padR}" y1="${yOf(0).toFixed(1)}" y2="${yOf(0).toFixed(1)}" stroke="var(--ink-3)" stroke-dasharray="3 3"></line>` : "";
+  const nx = Math.min(8, dates.length), xt = [];
+  for (let i = 0; i < nx; i++) { const d = dates[Math.round(i * (dates.length - 1) / Math.max(1, nx - 1))]; xt.push(`<text class="axis" x="${xOf(d).toFixed(1)}" y="${H - 6}" text-anchor="${i === 0 ? "start" : i === nx - 1 ? "end" : "middle"}">${new Date(d + "T12:00").toLocaleDateString(undefined, {month: "short", day: "numeric"})}</text>`); }
+  const paths = shown.map(t => {
+    const pts = t.series.map(d => `${xOf(d.date).toFixed(1)},${yOf(val(t, d)).toFixed(1)}`);
+    const start = t.series[0];
+    return `<path class="series" data-t="${t.ticker}" d="M${pts.join("L")}" stroke="${t.color}"></path>
+      <circle cx="${xOf(start.date).toFixed(1)}" cy="${yOf(val(t, start)).toFixed(1)}" r="4" fill="${t.color}" stroke="var(--surface)" stroke-width="2"></circle>`;
+  }).join("");
+  const lab = shown.map(t => { const last = t.series[t.series.length - 1]; return {t, x: xOf(last.date) + 6, y: yOf(val(t, last)) + 4}; }).sort((a, b) => a.y - b.y);
+  for (let i = 1; i < lab.length; i++) if (lab[i].y - lab[i - 1].y < 12) lab[i].y = lab[i - 1].y + 12;
+  const labels = lab.map(l => `<text class="axis" x="${l.x.toFixed(1)}" y="${l.y.toFixed(1)}" style="fill:${l.t.color};font-weight:600">${l.t.ticker}</text>`).join("");
+  el.innerHTML = `<div class="tip"></div><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${gridY.join("")}${zero}${paths}${labels}${xt.join("")}<line id="xhair" x1="0" x2="0" y1="${padT}" y2="${padT + ih}" stroke="var(--ink-3)" stroke-width="1" style="display:none"></line></svg>`;
+  const svg = el.querySelector("svg"), tip = el.querySelector(".tip"), xhair = el.querySelector("#xhair");
+  svg.addEventListener("mousemove", e => {
+    const r = svg.getBoundingClientRect(); const mx = (e.clientX - r.left) * W / r.width;
+    let best = null; for (const d of dates) { const dx = Math.abs(xOf(d) - mx); if (!best || dx < best[0]) best = [dx, d]; }
+    if (!best) return; const d = best[1];
+    const rows = shown.map(t => ({t, p: t.series.find(x => x.date === d)})).filter(x => x.p)
+      .map(x => `<div class="row"><span><span class="dot" style="background:${x.t.color}"></span>${x.t.ticker}</span><span class="mono" style="margin-left:14px">${fmtMoney(x.p.close)} <span style="color:${x.p.close >= x.t.base ? "var(--up)" : "var(--down)"}">${fmtPct((x.p.close - x.t.base) / x.t.base * 100)}</span></span></div>`);
+    if (!rows.length) { tip.style.display = "none"; return; }
+    tip.innerHTML = `<div style="color:var(--ink-3);margin-bottom:4px">${new Date(d + "T12:00").toLocaleDateString(undefined, {weekday: "short", month: "short", day: "numeric", year: "numeric"})}</div>` + rows.join("");
+    const px = xOf(d) * r.width / W; xhair.setAttribute("x1", xOf(d)); xhair.setAttribute("x2", xOf(d)); xhair.style.display = "";
+    tip.style.display = "block"; tip.style.top = "8px"; tip.style.left = (px + 14 + tip.offsetWidth > r.width ? px - tip.offsetWidth - 14 : px + 14) + "px";
+  });
+  svg.addEventListener("mouseleave", () => { tip.style.display = "none"; xhair.style.display = "none"; });
+  document.querySelectorAll("#legend .item").forEach(el2 => { el2.onmouseenter = () => svg.querySelectorAll("path.series").forEach(p => p.classList.toggle("dim", p.dataset.t !== el2.dataset.t)); el2.onmouseleave = () => svg.querySelectorAll("path.series").forEach(p => p.classList.remove("dim")); });
 }
 
 const tile = (k, v, cls = "") => `<div class="tile"><div class="k">${k}</div><div class="v ${cls}">${v ?? "—"}</div></div>`;
