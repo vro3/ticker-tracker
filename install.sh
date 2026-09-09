@@ -23,6 +23,7 @@ mkdir -p "$HOME/TickerTracker"
 
 echo "→ Background service"
 launchctl bootout "gui/$(id -u)/$LABEL" 2>/dev/null || true
+mkdir -p "$HOME/Library/LaunchAgents"
 sed -e "s|__PYTHON__|$PYTHON|g" -e "s|__PROJECT__|$PROJECT|g" -e "s|__HOME__|$HOME|g" \
   launchd/$LABEL.plist.template > "$PLIST"
 launchctl bootstrap "gui/$(id -u)" "$PLIST"

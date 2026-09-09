@@ -103,7 +103,7 @@ def build_payload():
                     setup_cache[tk] = None
             return setup_cache[tk]
         subs = []
-        for r in con.execute("SELECT * FROM submissions ORDER BY sent_at DESC"):
+        for r in con.execute("SELECT * FROM submissions WHERE hidden=0 ORDER BY sent_at DESC"):
             s = dict(r)
             s.pop("extraction_json", None)
             tk = s["ticker"]
@@ -283,9 +283,8 @@ class Handler(BaseHTTPRequestHandler):
                     invalidate_payload()
                     return self._json({"ok": ok})
                 if body.get("delete") is True:
-                    with db.tx() as con:
-                        con.execute("DELETE FROM submissions WHERE id=?", (sub_id,))
-                        con.execute("DELETE FROM judgments WHERE submission_id=?", (sub_id,))
+                    with db.tx() as con:      # hide, don't destroy; `python -m tracker restore <id>` brings it back
+                        con.execute("UPDATE submissions SET hidden=1 WHERE id=?", (sub_id,))
                     invalidate_payload()
                     return self._json({"ok": True})
             self._json({"error": "not found"}, 404)

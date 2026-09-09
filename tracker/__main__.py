@@ -121,6 +121,18 @@ def cmd_add(args):
                                "horizon_days", "confidence", "status", "error")})
 
 
+def cmd_restore(args):
+    with db.tx() as con:
+        if args.id is None:
+            rows = con.execute("SELECT id, sent_at, sender_name, ticker, note FROM submissions WHERE hidden=1 ORDER BY id").fetchall()
+            for r in rows:
+                print(f"#{r['id']}  {r['sent_at'][:16]}  {r['sender_name']:<8} {r['ticker'] or '?':<6} {(r['note'] or '')[:60]}")
+            print(f"{len(rows)} hidden entr{'y' if len(rows) == 1 else 'ies'}; restore with: python -m tracker restore <id>")
+        else:
+            con.execute("UPDATE submissions SET hidden=0 WHERE id=?", (args.id,))
+            print(f"restored #{args.id}")
+
+
 def cmd_doctor(args):
     cfg = config.load()
     print(f"home:        {config.APP_HOME}")
@@ -178,6 +190,9 @@ def main():
     sp.add_parser("judge", help="re-score all calls").set_defaults(f=cmd_judge)
     sp.add_parser("serve", help="dashboard only").set_defaults(f=cmd_serve)
     sp.add_parser("doctor", help="check permissions and connectivity").set_defaults(f=cmd_doctor)
+    r = sp.add_parser("restore", help="un-hide an entry removed from the dashboard (or list hidden ones)")
+    r.add_argument("id", nargs="?", type=int)
+    r.set_defaults(f=cmd_restore)
     a = sp.add_parser("add", help="add a screenshot by hand")
     a.add_argument("--image")
     a.add_argument("--sender", default="Manual")

@@ -131,6 +131,50 @@ def test_ingest_failure_paths():
     finally:
         pipeline.imessage.collect_new, pipeline.imessage.stage_image, pipeline.record_submission = orig_collect, orig_stage, orig_record
 
+def test_delete_is_soft_and_restorable():
+    from tracker import db as _db
+    from datetime import date
+    today = date.today().isoformat()
+    with _db.tx() as con:
+        cur = con.execute("INSERT INTO submissions(sent_at,sent_date,sender_handle,sender_name,ticker,status,created_at) VALUES (?,?,'+1','T','AAPL','ok',?)", (today, today, today))
+        sid = cur.lastrowid
+    code, r = req(f"/api/submissions/{sid}", "POST", {"delete": True})
+    assert code == 200
+    with _db.tx() as con:
+        row = con.execute("SELECT hidden FROM submissions WHERE id=?", (sid,)).fetchone()
+        assert row and row["hidden"] == 1
+    web.invalidate_payload()
+    assert all(s["id"] != sid for s in web.build_payload()["submissions"])
+    with _db.tx() as con:
+        con.execute("UPDATE submissions SET hidden=0 WHERE id=?", (sid,))
+    web.invalidate_payload()
+    assert any(s["id"] == sid for s in web.build_payload()["submissions"])
+
+def test_retry_cap_gives_up_after_three():
+    from tracker import pipeline, db as _db
+    from datetime import datetime
+    class M:
+        rowid = 535353; handle = "+1"; images = []; caption = "$AAPL x"; chat_name = "t"; caption_rowid = None
+        sent_at = datetime.now().astimezone()
+    orig_collect, orig_record = pipeline.imessage.collect_new, pipeline.record_submission
+    pipeline.imessage.collect_new = lambda cfg, after: ([M()], 535353)
+    def boom(*a, **k): raise RuntimeError("db exploded")
+    pipeline.record_submission = boom
+    cfg = {"chat_db": "/dev/null", "timezone": "America/Chicago", "people": {}}
+    try:
+        with _db.tx() as con:
+            _db.set_meta(con, "last_msg_rowid", 1); con.execute("DELETE FROM meta WHERE key='retries:535353'")
+            con.execute("DELETE FROM seen_messages WHERE msg_rowid=535353")
+        for i in range(3):
+            pipeline.ingest(cfg)
+        with _db.tx() as con:
+            seen = con.execute("SELECT 1 FROM seen_messages WHERE msg_rowid=535353").fetchone()
+            hw = int(_db.get_meta(con, "last_msg_rowid"))
+        assert seen is not None and hw == 535353, (seen, hw)   # given up: stays claimed, mark advanced
+    finally:
+        pipeline.imessage.collect_new, pipeline.record_submission = orig_collect, orig_record
+
+
 if __name__ == "__main__":
     import sys
     fails = 0

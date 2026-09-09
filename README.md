@@ -68,6 +68,9 @@ Changes take effect on the next poll, no restart needed (except `port`).
   the ticker. Nothing is lost.
 - Add something by hand: `.venv/bin/python -m tracker add --image pic.png --sender Vince --note "..."`
 - Logs: `~/TickerTracker/tracker.log`
+- The ✕ on a card hides it, nothing is deleted. List hidden ones: `.venv/bin/python -m tracker restore`; bring one back: `.venv/bin/python -m tracker restore <id>`
+- Health: the page footer says "Tracker healthy" or why not; `http://localhost:8787/api/health` has the details
+- Tests: `tests/run_all.sh`
 - Restart: `launchctl kickstart -k gui/$(id -u)/com.vr.tickertracker`
 - Remove: `./uninstall.sh`
 

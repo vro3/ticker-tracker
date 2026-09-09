@@ -11,6 +11,7 @@ log = logging.getLogger("tracker")
 
 
 TICKER_RE = re.compile(r"^[A-Z0-9.\-]{1,10}$")
+MAX_RECORD_TRIES = 3
 
 
 def _num(x):
@@ -116,9 +117,14 @@ def ingest(cfg):
                               chat_name=m.chat_name, image=image, caption=m.caption, msg_rowid=m.rowid)
             n += 1
         except Exception as e:
-            log.error("message %s not recorded (%s); will retry next poll", m.rowid, e)
-            with db.tx() as c2:                            # unclaim so the next poll retries it
-                c2.execute("DELETE FROM seen_messages WHERE msg_rowid=?", (m.rowid,))
+            with db.tx() as c2:
+                tries = int(db.get_meta(c2, f"retries:{m.rowid}", 0) or 0) + 1
+                db.set_meta(c2, f"retries:{m.rowid}", tries)
+                if tries >= MAX_RECORD_TRIES:              # give up: keep it claimed, log it, move on
+                    log.error("message %s failed %d times (%s); skipping it for good", m.rowid, tries, e)
+                    continue
+                log.error("message %s not recorded (%s); retry %d/%d next poll", m.rowid, e, tries, MAX_RECORD_TRIES)
+                c2.execute("DELETE FROM seen_messages WHERE msg_rowid=?", (m.rowid,))   # unclaim so it is retried
                 if cap_rowid:
                     c2.execute("DELETE FROM seen_messages WHERE msg_rowid=?", (cap_rowid,))
             high = min(high, m.rowid - 1, (cap_rowid or m.rowid) - 1)   # hold the mark before message and caption
@@ -144,25 +150,32 @@ def _initial_high_water(cfg) -> int:
 
 
 def refresh_prices():
+    cfg = config.load()
     with db.tx() as con:
         n = prices.refresh(con)
         judge.judge_all(con)
-        alerts.check(con, config.load())
+        new = alerts.check(con, cfg)
+    alerts.deliver(new, cfg)
     return n
 
 
 def refresh_intraday():
     with db.tx() as con:
         tickers = [r["ticker"] for r in con.execute(
-            "SELECT DISTINCT ticker FROM submissions WHERE ticker IS NOT NULL AND status='ok'")]
-        return intraday.refresh(con, tickers)
+            "SELECT DISTINCT ticker FROM submissions WHERE ticker IS NOT NULL AND status='ok' AND hidden=0")]
+    data = intraday.fetch_5m(tickers)                     # network outside any transaction
+    with db.tx() as con:
+        intraday.store(con, data)
+    return len(data)
 
 
 def refresh_quotes():
+    cfg = config.load()
     with db.tx() as con:
         n = prices.refresh_quotes(con)
         judge.judge_all(con)
-        alerts.check(con, config.load())
+        new = alerts.check(con, cfg)
+    alerts.deliver(new, cfg)
     return n
 
 

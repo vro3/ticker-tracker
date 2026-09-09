@@ -83,6 +83,10 @@ def connect() -> sqlite3.Connection:
     if key not in _initialized:
         con.execute("PRAGMA journal_mode=WAL")
         con.executescript(SCHEMA)
+        cols = {r["name"] for r in con.execute("PRAGMA table_info(submissions)")}
+        if "hidden" not in cols:               # soft delete: the dashboard ✕ hides, never destroys
+            con.execute("ALTER TABLE submissions ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
+            con.commit()
         _initialized.add(key)
     return con
 

@@ -51,7 +51,7 @@ def check(con, cfg):
     new = []
     latest = {r["ticker"]: dict(r) for r in con.execute("SELECT * FROM latest")}
     tickers = [r["ticker"] for r in con.execute(
-        "SELECT DISTINCT ticker FROM submissions WHERE ticker IS NOT NULL AND status='ok'")]
+        "SELECT DISTINCT ticker FROM submissions WHERE ticker IS NOT NULL AND status='ok' AND hidden=0")]
     for tk in tickers:
         try:
             _check_ticker(con, cfg, tk, latest, thr, today, new)
@@ -60,12 +60,20 @@ def check(con, cfg):
     _check_hits(con, new)
     _prune_meta(con)
     con.commit()
-    if new and cfg.get("alert_imessage") and cfg.get("alert_chat_guid"):
-        for a in new:
-            if send_imessage(cfg["alert_chat_guid"], a["message"]):
-                con.execute("UPDATE alerts SET sent=1 WHERE id=?", (a["id"],))
-        con.commit()
     return new
+
+
+def deliver(new, cfg):
+    """Text new alerts to the group (if enabled). Call this AFTER the DB transaction has closed."""
+    if not (new and cfg.get("alert_imessage") and cfg.get("alert_chat_guid")):
+        return 0
+    sent = 0
+    for a in new:
+        if send_imessage(cfg["alert_chat_guid"], a["message"]):
+            sent += 1
+            with db.tx() as con:
+                con.execute("UPDATE alerts SET sent=1 WHERE id=?", (a["id"],))
+    return sent
 
 
 def _prune_meta(con):
@@ -118,7 +126,7 @@ def _check_ticker(con, cfg, tk, latest, thr, today, new):
 
 def _check_hits(con, new):
     rows = con.execute("SELECT s.id, s.ticker, s.sender_name, s.target_price, j.reasoning FROM judgments j "
-                       "JOIN submissions s ON s.id=j.submission_id WHERE j.verdict='hit' AND s.target_price IS NOT NULL").fetchall()
+                       "JOIN submissions s ON s.id=j.submission_id WHERE j.verdict='hit' AND s.target_price IS NOT NULL AND s.hidden=0").fetchall()
     for r in rows:
         msg = f"{r['sender_name']} called it: {r['ticker']} reached the {_fmt(r['target_price'])} target."
         a = _add(con, r["ticker"], "hit", msg, f"alert:hit:{r['id']}")

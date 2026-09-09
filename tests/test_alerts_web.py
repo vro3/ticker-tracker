@@ -60,6 +60,8 @@ def test_alert_sent_marked_by_id_and_coercion():
             cfg = dict(config.DEFAULTS, alert_move_pct=1, alert_imessage=True, alert_chat_guid="x")
             new = alerts.check(con, cfg)
             assert new and all("id" in a for a in new)
+        assert alerts.deliver(new, cfg) == len(new)
+        with db.tx() as con:
             rows = con.execute("SELECT id, sent FROM alerts").fetchall()
             assert all(r["sent"] == 1 for r in rows) and len(sent) == len(rows)
     finally:
