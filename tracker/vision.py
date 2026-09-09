@@ -96,12 +96,14 @@ def _extract_cli(cfg: dict, image: Path | None, caption: str) -> dict:
         prompt = "There is no screenshot, only a text message. Extract the ticker from the text.\n\n" + prompt
     prompt += "\n\nRespond with ONLY a JSON object matching this schema, no prose, no code fences:\n" + json.dumps(SCHEMA)
     from . import config as _cfg
-    scope = f"Read({_cfg.SCREENSHOT_DIR}/**)" if image is not None else "Read(/nonexistent/**)"
-    cmd = [claude, "-p", prompt, "--output-format", "json", "--allowedTools", scope,
+    shots = str(_cfg.SCREENSHOT_DIR)
+    scope = f"Read({shots}/**)" if image is not None else "Read(/nonexistent/**)"
+    # The model may only read files inside the screenshots folder: no shell, no writes, no web, no other files.
+    cmd = [claude, "-p", prompt, "--output-format", "json", "--add-dir", shots, "--allowedTools", scope,
            "--disallowedTools", "Bash,Edit,Write,WebFetch,WebSearch,Agent,Glob,Grep"]
     if cfg.get("model"):
         cmd += ["--model", cfg["model"]]
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300, cwd=shots)
     if proc.returncode != 0:
         raise RuntimeError(f"claude CLI failed: {proc.stderr.strip()[:400]}")
     outer = json.loads(proc.stdout)
