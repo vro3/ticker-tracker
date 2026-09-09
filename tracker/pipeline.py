@@ -85,7 +85,8 @@ def ingest(cfg):
             log.error("message %s not recorded (%s); will retry next poll", m.rowid, e)
             with db.tx() as c2:                            # unclaim so the next poll retries it
                 c2.execute("DELETE FROM seen_messages WHERE msg_rowid=?", (m.rowid,))
-            break                                          # do not advance the high-water mark past it
+            high = min(high, m.rowid - 1)                  # hold the high-water mark before this message
+            break
         finally:
             con.close()
     with db.tx() as con:

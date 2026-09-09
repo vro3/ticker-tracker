@@ -127,7 +127,7 @@ def test_ingest_failure_paths():
         with _db.tx() as con:
             seen = con.execute("SELECT 1 FROM seen_messages WHERE msg_rowid=424242").fetchone()
             hw = int(_db.get_meta(con, "last_msg_rowid"))
-        assert n == 0 and seen is None and hw == 1, (n, seen, hw)
+        assert n == 0 and seen is None and hw < 424242, (n, seen, hw)
     finally:
         pipeline.imessage.collect_new, pipeline.imessage.stage_image, pipeline.record_submission = orig_collect, orig_stage, orig_record
 
