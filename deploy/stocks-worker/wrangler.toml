@@ -1,0 +1,13 @@
+# Serves the frozen dashboard at drummingdj.com/stocks without touching the main site.
+# Deploy: cd deploy/stocks-worker && wrangler deploy
+name = "drummingdj-stocks"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+routes = [
+  { pattern = "drummingdj.com/stocks*", zone_name = "drummingdj.com" },
+  { pattern = "www.drummingdj.com/stocks*", zone_name = "drummingdj.com" },
+]
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true
