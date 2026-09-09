@@ -103,6 +103,17 @@ def linreg_last(vals):
     return my + slope * (n - 1 - mx)
 
 
+def _clean(bars):
+    """Drop bars missing any OHLC value; treat missing volume as 0."""
+    out = []
+    for b in bars:
+        if all(b.get(k) is not None for k in ("open", "high", "low", "close")):
+            if b.get("volume") is None:
+                b = dict(b, volume=0.0)
+            out.append(b)
+    return out
+
+
 # ---------- supply / demand zones ----------
 
 def find_zones(bars, atr_len=20, sensitivity=1.2, max_base=4, max_age=250, ob_periods=3, ob_threshold_pct=3.0):
@@ -323,6 +334,7 @@ def vwma(closes, vols, n):
 
 def ema_vwma_state(bars, ema_len=8, vwma_len=26):
     """EMA8 vs VWMA26: state ('above'/'below'), bars since the last cross, and whether the cross is on the last bar."""
+    bars = _clean(bars)
     closes = [b["close"] for b in bars]
     vols = [b.get("volume") or 0.0 for b in bars]
     if len(closes) < max(ema_len, vwma_len) + 1:
@@ -439,6 +451,7 @@ def rsi_series(closes, n):
 
 def rsi2_reversal(bars):
     """vr_2PeriodRSITradingIndicator: RSI(2) < 10 with close > EMA34 = bull; RSI(2) > 90 with close < EMA34 = bear."""
+    bars = _clean(bars)
     closes = [b["close"] for b in bars]
     if len(closes) < 40:
         return None
@@ -452,6 +465,7 @@ def rsi2_reversal(bars):
 
 def volume_split(bars, lookback=60):
     """EnhancedVolume_vr_op: buy volume = V*(C-L)/(H-L), sell = V*(H-C)/(H-L); spike when relative volume is 2+ st dev."""
+    bars = _clean(bars)
     if len(bars) < lookback + 1:
         return None
     b = bars[-1]
@@ -472,6 +486,7 @@ def pivot_ladder(bars, width=5, lookback=60, stdev_len=20, stdev_mult=2.0, add_f
     """aaaPivotWithConfirmation: a pivot low (lowest low with `width` bars each side) is confirmed when a later close
     goes above the pivot bar's high. Then: entry = that confirming close, stop = pivot low, add = entry + add_frac*stdev,
     trail/target = entry + stdev_mult*stdev. Returns the most recent confirmed ladder, with status active (price above stop) or stopped."""
+    bars = _clean(bars)
     n = len(bars)
     if n < width * 2 + stdev_len + 2:
         return None
@@ -502,6 +517,7 @@ def pivot_ladder(bars, width=5, lookback=60, stdev_len=20, stdev_mult=2.0, add_f
 def grade(bars, last_price=None, sig=None):
     """Evidence-based read of the current spot. Green = the setups that tested best are present in a liquid name.
     Red = the conditions that tested worst. Yellow = everything else. Returns dict with grade, reasons, speculative flag."""
+    bars = _clean(bars)
     if len(bars) < 60:
         return {"grade": None, "reasons": ["not enough history"], "speculative": None}
     price = last_price or bars[-1]["close"]

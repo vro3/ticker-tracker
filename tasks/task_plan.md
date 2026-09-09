@@ -24,3 +24,4 @@
 - 22:30 Phase 3: 4 test modules, all pass (tests/run_all.sh)
 - 22:30 Phase 4 started: code-reviewer audit running
 - 22:27 Phase 4 audit #1: 10 findings, all fixed (POST hardening, payload cache, XSS escape, lock-free network, NaN guards, TTM SMA, gap ordering, port guard, alert per-ticker guard + meta prune). Tests green. Abuse probes return 400/403/413/404 as intended.
+- 22:45 Audit #2: 6 findings fixed (LAN/CSRF fail-open, 2 more XSS spots + ingest ticker validation, ingest tx restructure, db init-once, None guards, JS null guards). New tests/test_web_security.py (10 tests). All 5 suites green. Committed.

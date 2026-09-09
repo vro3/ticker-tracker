@@ -285,7 +285,7 @@ function drawMaster() {
   }).join("");
   const lab = shown.map(t => { const last = t.series[t.series.length - 1]; return {t, x: xOf(last.date) + 6, y: yOf(val(t, last)) + 4}; }).sort((a, b) => a.y - b.y);
   for (let i = 1; i < lab.length; i++) if (lab[i].y - lab[i - 1].y < 12) lab[i].y = lab[i - 1].y + 12;
-  const labels = lab.map(l => `<text class="axis" x="${l.x.toFixed(1)}" y="${l.y.toFixed(1)}" style="fill:${l.t.color};font-weight:600">${l.t.ticker}</text>`).join("");
+  const labels = lab.map(l => `<text class="axis" x="${l.x.toFixed(1)}" y="${l.y.toFixed(1)}" style="fill:${l.t.color};font-weight:600">${esc(l.t.ticker)}</text>`).join("");
   el.innerHTML = `<div class="tip"></div><svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${gridY.join("")}${zero}${paths}${labels}${xt.join("")}<line id="xhair" x1="0" x2="0" y1="${padT}" y2="${padT + ih}" stroke="var(--ink-3)" stroke-width="1" style="display:none"></line></svg>`;
   const svg = el.querySelector("svg"), tip = el.querySelector(".tip"), xhair = el.querySelector("#xhair");
   svg.addEventListener("mousemove", e => {
@@ -293,7 +293,7 @@ function drawMaster() {
     let best = null; for (const d of dates) { const dx = Math.abs(xOf(d) - mx); if (!best || dx < best[0]) best = [dx, d]; }
     if (!best) return; const d = best[1];
     const rows = shown.map(t => ({t, p: t.series.find(x => x.date === d)})).filter(x => x.p)
-      .map(x => `<div class="row"><span><span class="dot" style="background:${x.t.color}"></span>${x.t.ticker}</span><span class="mono" style="margin-left:14px">${fmtMoney(x.p.close)} <span style="color:${x.p.close >= x.t.base ? "var(--up)" : "var(--down)"}">${fmtPct((x.p.close - x.t.base) / x.t.base * 100)}</span></span></div>`);
+      .map(x => `<div class="row"><span><span class="dot" style="background:${x.t.color}"></span>${esc(x.t.ticker)}</span><span class="mono" style="margin-left:14px">${fmtMoney(x.p.close)} <span style="color:${x.p.close >= x.t.base ? "var(--up)" : "var(--down)"}">${fmtPct((x.p.close - x.t.base) / x.t.base * 100)}</span></span></div>`);
     if (!rows.length) { tip.style.display = "none"; return; }
     tip.innerHTML = `<div style="color:var(--ink-3);margin-bottom:4px">${new Date(d + "T12:00").toLocaleDateString(undefined, {weekday: "short", month: "short", day: "numeric", year: "numeric"})}</div>` + rows.join("");
     const px = xOf(d) * r.width / W; xhair.setAttribute("x1", xOf(d)); xhair.setAttribute("x2", xOf(d)); xhair.style.display = "";
@@ -416,7 +416,7 @@ function setupStrip(s) {
     chips.push(evChip("Daily", dy.ema_vwma));
     chips.push(gapChips("Daily", dy.gaps, s.latest_price));
   }
-  if (st.rsi2) {
+  if (st.rsi2 && st.rsi2.rsi2 != null) {
     const r = st.rsi2;
     chips.push(`<span class="chip ${r.signal === "bull" ? "up" : r.signal === "bear" ? "down" : ""}">RSI(2) <b>${r.rsi2.toFixed(0)}</b>${r.signal ? " · " + r.signal + " reversal vs EMA34" : ""}</span>`);
   }
@@ -424,7 +424,7 @@ function setupStrip(s) {
     const v = st.volume;
     chips.push(`<span class="chip ${v.spike ? "warn" : ""}">Volume <b>${v.buy_pct.toFixed(0)}% buy</b>${v.vs_avg ? ", " + v.vs_avg.toFixed(1) + "× avg" : ""}${v.spike ? " · spike" : ""}</span>`);
   }
-  if (st.ladder) {
+  if (st.ladder && st.ladder.entry != null) {
     const L = st.ladder;
     chips.push(`<span class="chip ${L.status === "active" ? "up" : "muted"}">Pivot ladder ${L.status}: entry <b>${money(L.entry)}</b>, stop ${money(L.stop)}, add ${money(L.add)}, target ${money(L.target)} <span style="color:var(--ink-3)">(${L.confirmed})</span></span>`);
   }

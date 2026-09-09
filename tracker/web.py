@@ -1,4 +1,5 @@
 """Tiny dashboard server: static page + JSON API. No framework needed."""
+import ipaddress
 import json
 import logging
 import mimetypes
@@ -82,6 +83,7 @@ def build_payload():
                     bars = [dict(b) for b in con.execute(
                         "SELECT date, open, high, low, close, volume FROM prices WHERE ticker=? ORDER BY date", (tk,))]
                     price = latest.get(tk, {}).get("price") or (bars[-1]["close"] if bars else None)
+                    bars = ta._clean(bars)
                     daily = None
                     if len(bars) >= 30 and price:
                         daily = {"ema_vwma": ta.ema_vwma_state(bars), "gaps": ta.gap_zones(bars),
@@ -184,8 +186,21 @@ class Handler(BaseHTTPRequestHandler):
         self._send(code, json.dumps(obj).encode())
 
     def _remote(self) -> bool:
-        """True when the request came through the Cloudflare tunnel (or any proxy), not from this Mac."""
-        return bool(self.headers.get("Cf-Connecting-Ip") or self.headers.get("X-Forwarded-For"))
+        """True unless the request came from this Mac itself (loopback) with no proxy headers."""
+        try:
+            local = ipaddress.ip_address(self.client_address[0]).is_loopback
+        except ValueError:
+            local = False
+        return (not local) or bool(self.headers.get("Cf-Connecting-Ip") or self.headers.get("X-Forwarded-For"))
+
+    def _cross_site(self) -> bool:
+        """Browser POSTs from another origin (drive-by CSRF). Same-origin and non-browser clients pass."""
+        origin = self.headers.get("Origin") or self.headers.get("Referer")
+        if not origin:
+            return False
+        host = urlparse(origin).hostname or ""
+        allowed = {"localhost", "127.0.0.1", "::1", (self.headers.get("Host") or "").split(":")[0].lower()}
+        return host.lower() not in allowed
 
     def do_GET(self):
         try:
@@ -231,6 +246,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "bad json"}, 400)
             if not isinstance(body, dict):
                 return self._json({"error": "bad json"}, 400)
+            if self._cross_site():
+                return self._json({"error": "cross-site request refused"}, 403)
             if path in ("/api/refresh", "/api/ingest"):
                 if self._remote():
                     return self._json({"error": "local only"}, 403)

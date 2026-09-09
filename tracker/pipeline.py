@@ -1,5 +1,6 @@
 """Glue: new iMessages -> screenshot staging -> Claude extraction -> database -> prices -> verdicts."""
 import json
+import re
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
@@ -7,6 +8,14 @@ from pathlib import Path
 from . import alerts, config, db, imessage, intraday, judge, prices, vision
 
 log = logging.getLogger("tracker")
+
+
+TICKER_RE = re.compile(r"^[A-Z0-9.\-]{1,10}$")
+
+
+def _clean_ticker(raw) -> str | None:
+    t = (str(raw) if raw is not None else "").upper().strip().lstrip("$")
+    return t if TICKER_RE.match(t) else None
 
 
 def record_submission(con, cfg, *, sent_at, sender_handle, sender_name, chat_name, image: Path | None,
@@ -24,7 +33,7 @@ def record_submission(con, cfg, *, sent_at, sender_handle, sender_name, chat_nam
     try:
         data = override if override else vision.extract(cfg, staged, caption)
         row.update({
-            "ticker": (data.get("ticker") or "").upper().strip() or None,
+            "ticker": _clean_ticker(data.get("ticker")),
             "company": data.get("company"), "price_seen": data.get("price"), "currency": data.get("currency"),
             "goal": data.get("goal"), "direction": data.get("direction") or "unknown",
             "target_price": data.get("target_price"), "horizon_days": data.get("horizon_days"),
@@ -56,21 +65,28 @@ def ingest(cfg):
             db.set_meta(con, "last_msg_rowid", after)
             log.info("first run: ignoring messages before rowid %d", after)
             return 0
-        ready, high = imessage.collect_new(cfg, after)
-        n = 0
-        for m in ready:
+    ready, high = imessage.collect_new(cfg, after)       # reads chat.db, no tracker.db lock held
+    n = 0
+    for m in ready:
+        with db.tx() as con:                               # short write: claim the message
             if con.execute("SELECT 1 FROM seen_messages WHERE msg_rowid=?", (m.rowid,)).fetchone():
                 continue
             con.execute("INSERT INTO seen_messages(msg_rowid, seen_at) VALUES (?,?)",
                         (m.rowid, datetime.now(timezone.utc).isoformat()))
-            name = imessage.sender_name(cfg, m.handle)
-            image = m.images[0] if m.images else None
+        name = imessage.sender_name(cfg, m.handle)
+        image = m.images[0] if m.images else None
+        con = db.connect()                                 # vision runs on this connection before any write
+        try:
             record_submission(con, cfg, sent_at=m.sent_at, sender_handle=m.handle, sender_name=name,
                               chat_name=m.chat_name, image=image, caption=m.caption, msg_rowid=m.rowid)
-            n += 1
+        finally:
+            con.close()
+        n += 1
+    with db.tx() as con:
         if high > after:
             db.set_meta(con, "last_msg_rowid", high)
-        if n:
+    if n:
+        with db.tx() as con:
             prices.refresh(con)
             judge.judge_all(con)
     return n

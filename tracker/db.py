@@ -72,12 +72,18 @@ CREATE TABLE IF NOT EXISTS meta (
 """
 
 
+_initialized = set()   # DB paths whose schema/WAL setup already ran in this process
+
+
 def connect() -> sqlite3.Connection:
     config.ensure_dirs()
     con = sqlite3.connect(config.DB_PATH, timeout=30)
     con.row_factory = sqlite3.Row
-    con.execute("PRAGMA journal_mode=WAL")
-    con.executescript(SCHEMA)
+    key = str(config.DB_PATH)
+    if key not in _initialized:
+        con.execute("PRAGMA journal_mode=WAL")
+        con.executescript(SCHEMA)
+        _initialized.add(key)
     return con
 
 
