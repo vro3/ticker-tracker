@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import config, db, imessage, judge, prices, vision
+from . import alerts, config, db, imessage, intraday, judge, prices, vision
 
 log = logging.getLogger("tracker")
 
@@ -88,15 +88,33 @@ def refresh_prices():
     with db.tx() as con:
         n = prices.refresh(con)
         judge.judge_all(con)
+        alerts.check(con, config.load())
+    return n
+
+
+def refresh_intraday():
+    with db.tx() as con:
+        tickers = [r["ticker"] for r in con.execute(
+            "SELECT DISTINCT ticker FROM submissions WHERE ticker IS NOT NULL AND status='ok'")]
+        return intraday.refresh(con, tickers)
+
+
+def refresh_quotes():
+    with db.tx() as con:
+        n = prices.refresh_quotes(con)
+        judge.judge_all(con)
+        alerts.check(con, config.load())
     return n
 
 
 def correct_ticker(sub_id: int, ticker: str):
     ticker = ticker.upper().strip()
+    ok = prices.validate_ticker(ticker)          # network first, no DB lock held
     with db.tx() as con:
-        ok = prices.validate_ticker(ticker)
         con.execute("UPDATE submissions SET ticker=?, status=?, error=NULL WHERE id=?",
                     (ticker, "ok" if ok else "needs_review", sub_id))
-        prices.refresh(con, [ticker])
-        judge.judge_all(con)
-        return ok
+    if ok:
+        with db.tx() as con:
+            prices.refresh(con, [ticker])
+            judge.judge_all(con)
+    return ok

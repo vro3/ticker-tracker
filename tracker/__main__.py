@@ -2,6 +2,7 @@
 import argparse
 import logging
 import sys
+from logging.handlers import RotatingFileHandler
 import time
 from datetime import datetime
 from pathlib import Path
@@ -14,21 +15,34 @@ def setup_logging():
     config.ensure_dirs()
     fmt = "%(asctime)s %(levelname)s %(name)s: %(message)s"
     logging.basicConfig(level=logging.INFO, format=fmt,
-                        handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler(config.LOG_PATH)])
+                        handlers=[logging.StreamHandler(sys.stdout),
+                                  RotatingFileHandler(config.LOG_PATH, maxBytes=5_000_000, backupCount=3)])
 
 
 def cmd_run(args):
     cfg = config.load()
-    web.serve(cfg["port"], block=False)
+    try:
+        web.serve(cfg["port"], block=False)
+    except OSError as e:
+        logging.getLogger("tracker").error("dashboard port %s unavailable (%s); running without it", cfg["port"], e)
     last_prices = 0
+    last_quotes = 0
+    last_intraday = 0
     log = logging.getLogger("tracker")
-    log.info("running: poll every %ss, prices every %sm, home %s", cfg["poll_seconds"], cfg["price_refresh_minutes"], config.APP_HOME)
+    log.info("running: poll every %ss, prices every %sm, quotes every %ss in market hours, home %s",
+             cfg["poll_seconds"], cfg["price_refresh_minutes"], cfg.get("quote_refresh_seconds", 30), config.APP_HOME)
     while True:
-        cfg = config.load()
+        try:
+            cfg = config.load()
+        except Exception as e:
+            log.error("config.json unreadable, keeping last good config: %s", e)
         try:
             pipeline.ingest(cfg)
+            with db.tx() as con:
+                db.set_meta(con, "last_poll", datetime.now().astimezone().isoformat())
         except Exception as e:
             log.error("ingest failed: %s", e)
+            _note_error(e)
         if time.time() - last_prices > cfg["price_refresh_minutes"] * 60:
             try:
                 pipeline.refresh_prices()
@@ -36,8 +50,33 @@ def cmd_run(args):
                     db.set_meta(con, "last_price_refresh", datetime.now().isoformat())
             except Exception as e:
                 log.error("price refresh failed: %s", e)
-            last_prices = time.time()
-        time.sleep(cfg["poll_seconds"])
+                _note_error(e)
+            last_prices = last_quotes = time.time()
+        elif prices.market_open_now() and time.time() - last_quotes >= cfg.get("quote_refresh_seconds", 30):
+            try:
+                pipeline.refresh_quotes()
+                with db.tx() as con:
+                    db.set_meta(con, "last_price_refresh", datetime.now().isoformat())
+            except Exception as e:
+                log.error("quote refresh failed: %s", e)
+                _note_error(e)
+            last_quotes = time.time()
+        if (prices.market_open_now() or last_intraday == 0) and time.time() - last_intraday >= cfg.get("intraday_refresh_seconds", 300):
+            try:
+                pipeline.refresh_intraday()
+            except Exception as e:
+                log.error("intraday refresh failed: %s", e)
+                _note_error(e)
+            last_intraday = time.time()
+        time.sleep(max(5, int(cfg.get("poll_seconds", 30))))
+
+
+def _note_error(e):
+    try:
+        with db.tx() as con:
+            db.set_meta(con, "last_error", f"{datetime.now().astimezone().isoformat()} {type(e).__name__}: {str(e)[:300]}")
+    except Exception:
+        pass
 
 
 def cmd_ingest(args):
@@ -105,6 +144,24 @@ def cmd_doctor(args):
         print(f"market data: {'OK' if ok else 'FAIL'} (AAPL lookup)")
     except Exception as e:
         print(f"market data: FAIL: {e}")
+    import shutil, subprocess, urllib.request
+    claude = shutil.which("claude") or str(Path.home() / ".local/bin/claude")
+    if backend == "cli":
+        try:
+            st = subprocess.run([claude, "auth", "status"], capture_output=True, text=True, timeout=20).stdout
+            print(f"claude cli:  {'logged in' if '\"loggedIn\": true' in st else 'NOT logged in (run: claude auth login)'} ({claude})")
+        except Exception as e:
+            print(f"claude cli:  FAIL: {e}")
+    try:
+        with urllib.request.urlopen(f"http://localhost:{cfg['port']}/api/health", timeout=5) as r:
+            import json as _j
+            h = _j.loads(r.read())
+            print(f"service:     {'OK' if h['ok'] else 'STALE'}; last poll {h['poll_age_s']}s ago; last error: {h['last_error'] or 'none'}")
+    except Exception as e:
+        print(f"service:     not answering on port {cfg['port']} ({e}); start it: launchctl kickstart -k gui/$(id -u)/com.vr.tickertracker")
+    tun = shutil.which("cloudflared")
+    print(f"tunnel:      {'cloudflared installed' if tun else 'cloudflared not installed'}" +
+          (f"; service {'running' if subprocess.run(['pgrep', '-f', 'cloudflared tunnel run'], capture_output=True).returncode == 0 else 'NOT running'}" if tun else ""))
     print(f"dashboard:   http://localhost:{cfg['port']}")
 
 

@@ -51,6 +51,20 @@ CREATE TABLE IF NOT EXISTS judgments (
     as_of_price REAL,
     judged_at TEXT
 );
+CREATE TABLE IF NOT EXISTS intraday (
+    ticker TEXT NOT NULL,
+    ts TEXT NOT NULL,                 -- 5-minute bar start, New York time
+    open REAL, high REAL, low REAL, close REAL, volume REAL,
+    PRIMARY KEY (ticker, ts)
+);
+CREATE TABLE IF NOT EXISTS alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker TEXT,
+    kind TEXT,                        -- move / squeeze / hit
+    message TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    sent INTEGER NOT NULL DEFAULT 0   -- 1 once texted to the group
+);
 CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT

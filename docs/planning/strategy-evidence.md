@@ -1,0 +1,40 @@
+# What the research says about these methods
+Version 1.0 · 2026-09-08
+
+**Report: Documented edge of a swing trader's toolkit (skeptical read)**
+
+Caveat up front: QuantifiedStrategies.com's main site and SSRN both blocked fetching, so for those I relied on search-result excerpts and their Substack mirror. I flag which is which below.
+
+**1. Supply/demand zones (RBD/DBR).** No independent quantitative backtest exists that I could find. QuantifiedStrategies explicitly says they cannot meaningfully backtest it because "strong zone" is subjective (search excerpt, https://www.quantifiedstrategies.com/supply-and-demand-trading-strategy/). Everything else is indicator vendors. Closest academic analogue: support/resistance rules were one of the five rule families in Sullivan-Timmermann-White (7,846 rules, 100 years of DJIA); after data-snooping correction, no simple rule family beat the benchmark out-of-sample 1987-1996 (https://papers.ssrn.com/sol3/papers.cfm?abstract_id=160330, excerpt). Verdict: undocumented; treat as a discretionary framing device, not an edge.
+
+**2. The Strat (1-2-3 bars, FTFC, 2-2, 3-1-2).** Zero published backtests with numbers. The main usethinkscript thread states there are "NO BUY AND SELL SIGNALS" and reviewers flagged conceptual errors in bar definitions (https://usethinkscript.com/threads/indicator-for-think-or-swim-based-on-rob-smiths-the-strat.3312/). TradingView scripts are alert tools, not strategy reports. Structurally, a 2-2 reversal is an inside/outside-bar breakout, i.e. a short-term channel breakout with candlestick logic, both of which the academic literature finds weak on US stocks (Marshall, Young & Rose 2006, 35 DJIA stocks 1992-2001: candlesticks generate no abnormal returns; STW: breakouts don't survive snooping). FTFC is the one piece with indirect support: it is a multi-timeframe trend filter, and trend filters are the most robustly documented element in this whole list (see section 8).
+
+**3. 8/21 EMA cross.** On stocks/SPY daily, short EMA crosses are weak. QuantifiedStrategies' 9-EMA test: "fails miserably in mean reversion markets like stocks," and adding a 200-day filter makes it "an improvement, but still not tradable" (excerpt, https://www.quantifiedstrategies.com/9-ema-strategy/). The one vendor claiming 9/21 positive expectancy in 8 of 12 asset/timeframe combos (https://quant-signals.com/ema-crossover-strategy/, excerpt; page blocked) is not independent. Academic anchor: STW found no simple MA rule survives data snooping on DJIA/S&P. Verdict: fine as a trend-state descriptor, no stand-alone edge.
+
+**4. EMA8 vs VWMA.** No independent backtest at all; only Medium articles and TradingView scripts. Nothing to cite.
+
+**5. TTM Squeeze.** All the "88-92% win rate" numbers come from TOS Indicators, a vendor selling the backtester, and they are per-ticker optimized (DTE 41-2 over 30 years, NVDA "100%" over 5 years) with the required CFTC disclaimer that results are "designed with the benefit of hindsight" (https://tosindicators.com/trade-reports/squeeze). Those are curve-fit. StockCharts' Bollinger squeeze page gives rules but no stats and warns the squeeze "does not provide any directional clues" and head-fakes are common (https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/bollinger-band-squeeze). The general principle (volatility clusters; contraction precedes expansion) is well documented, but that predicts range, not direction. QuantifiedStrategies' squeeze backtest is paywalled (https://quantifiedstrategies.substack.com/p/bollinger-band-squeeze-trading-strategy).
+
+**6. Bollinger mean reversion.** This one has real support, with conditions. QuantifiedStrategies' public Bollinger backtest: 561 trades, 0.52% avg/trade, 8.8% CAGR, 23% max DD, 25% time in market, and the warning that unfiltered band-fading "often leads to huge losses because in downtrends the price never hits the upper band" (https://quantifiedstrategies.substack.com/p/backtested-bollinger-bands-trading). The stronger evidence is for short-term mean reversion generally rather than the bands specifically (section 8).
+
+**7. Gap fills.** The retail claim that "gaps always fill" is false on SPY daily. Trade That Swing, 25 years of SPY: next-day fill rates 59-61% for tiny (>0.1%) gaps, 42-43% for >0.5%, 28-33% for >1% gaps; conclusion that gaps "on their own" can't be traded (https://tradethatswing.com/sp-500-spy-es-gap-fill-strategy-and-statistics/). NQ futures 2015-2025 (2,791 sessions): 77.8% fill for <0.3 ATR gaps, 8.2% for >1.2 ATR; gap-downs fill slightly more often than gap-ups (https://tradingstats.net/gap-fill-strategy/). Note the ATR-scaled effect: big gaps are breakaway gaps and mostly don't fill. No study of a "three-candle" variant exists.
+
+**8. What the literature says has persistent edge**
+
+- Short-term reversal in liquid stocks (1-week losers outperform winners): 16.25% annual, Sharpe 1.09 but -53% DD, 1990-2009, top-100 caps (https://quantpedia.com/strategies/short-term-reversal-in-stocks). De Groot, Huij & Zhou: gross profits vanish after costs in small caps but survive at 30-50 bp/week net when limited to large caps with turnover control (excerpt, https://papers.ssrn.com/sol3/papers.cfm?abstract_id=1605049).
+- Connors-style RSI(2)/IBS pullbacks with trend filter: Alvarez, Russell 1000 1995-2015, RSI2<5 entry: 0.75%/trade, ~4.5-day hold, edge flat not decaying (https://alvarezquanttrading.com/blog/the-health-of-stock-mean-reversion-dead-dying-or-doing-just-fine/). Adding IBS<10 improved avg P&L 58%, win rates 71% vs 57% for high IBS (https://alvarezquanttrading.com/blog/internal-bar-strength-for-mean-reversion/). RSI2 with close>100-day MA, 2007-2018: low-teens CAGR baseline (https://alvarezquanttrading.com/blog/rsi2-strategy-double-returns-with-a-simple-rule-change/).
+- PEAD: ~6% abnormal 60-day drift, 15%/yr, -11% DD, 1987-2004, but "since the middle of the 90's PEAD returns became riskier and much lower," strongest in small caps (https://quantpedia.com/strategies/post-earnings-announcement-effect, https://quantpedia.com/50-years-in-pead-research/).
+- Trend filters (200-day / 10-month): don't add return but cut volatility ~33% and drawdown ~50% (Faber via https://ritholtz.com/2013/02/200-day-versus-10-month-moving-averages/).
+- Time-series momentum: robust at 1-12 month lookbacks in futures (Moskowitz-Ooi-Pedersen), weaker in individual stocks, where the 1-month horizon actually reverses.
+
+Weak or none: single MA crossovers, candlestick patterns, S/R and breakout rules after snooping correction (Park & Irwin: 58 of 92 studies positive, but stock-market results are the weakest and most contaminated by data snooping).
+
+**What the evidence supports combining (5-20 day swing)**
+
+1. **Regime filter + pullback buy.** Index and stock above 200-day (or 6-month return positive), buy RSI(2)<5-10 or IBS<0.2, exit RSI(2)>50-70 or 5-10 days. Best-documented retail-feasible edge. Caveat: holding period is 3-7 days, shorter than your 5-20 window; -50% DD unhedged in 2008; edge is thinner post-2013.
+2. **Large-cap only for any mean-reversion rule.** The costs literature is unambiguous: reversal profits in small caps are eaten by spread. Your Bollinger and gap-fade ideas only have a chance in liquid names.
+3. **Bollinger lower-band touch as the reversal trigger, only with the trend filter from (1), target the middle band.** Same edge as (1) dressed differently; unfiltered it loses in downtrends.
+4. **Fade only small gaps (<0.5 ATR) in index products; do not fade >1 ATR gaps.** Skip the "three candle" rule; there's no data for it.
+5. **PEAD long-only: buy positive-surprise, positive-reaction stocks 2 days after earnings, hold 20-60 days.** Fits your horizon, but edge has decayed since the 1990s and lives mostly in small caps where slippage bites.
+
+Not supported: using Strat bar combos, S/D zones, TTM squeeze fire, or 8/21 crosses as the *edge*. Use FTFC/8-21 only as the trend-state filter the literature does support, and expect zero from the rest.

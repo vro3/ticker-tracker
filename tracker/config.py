@@ -15,6 +15,15 @@ DEFAULTS = {
     "poll_seconds": 30,
     # How often to refresh prices (minutes).
     "price_refresh_minutes": 15,
+    # How often to pull near-real-time quotes during market hours (seconds). Daily history still uses price_refresh_minutes.
+    "quote_refresh_seconds": 30,
+    # Alerts: a move of this many percent from yesterday's close (and each multiple) raises an alert.
+    # How often to refresh 5-minute bars for the intraday setups during market hours (seconds).
+    "intraday_refresh_seconds": 300,
+    "alert_move_pct": 7,
+    # Text alerts to the group from the Messages app on this Mac. Off by default; set the chat GUID from chat.db.
+    "alert_imessage": False,
+    "alert_chat_guid": "",
     # Vision backend: "auto" (API key if present, else Claude Code CLI), "api", or "cli".
     "vision_backend": "auto",
     "anthropic_api_key": "",

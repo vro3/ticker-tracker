@@ -20,6 +20,12 @@ said would happen, and whether it did.
 Text-only messages that contain `$TICKER` are tracked too, using that day's close as the
 starting price.
 
+Each card also shows daily-bar signals: nearest supply and demand zones (fresh / tested, broken zones
+are dropped), 8/21 EMA state and days since the cross, position against the 200 EMA, Bollinger %B and
+TTM squeeze, RSI(14), and an ATR stop. Alerts for big daily moves, squeezes firing, and targets hit
+appear at the top of the page and can optionally be texted to the group. Details in
+`docs/planning/ta-signals.md`.
+
 ## Install on the Mac mini
 
 ```bash
@@ -48,6 +54,10 @@ Check it: `.venv/bin/python -m tracker doctor`
 | `port` | dashboard port, default 8787 |
 | `vision_backend` | `auto`, `api`, or `cli` |
 | `anthropic_api_key` | only needed for `api` |
+| `quote_refresh_seconds` | how often to pull near-real-time quotes during market hours, default 30 |
+| `alert_move_pct` | a move of this many percent from yesterday's close (and each multiple) raises an alert, default 7 |
+| `alert_imessage` | `true` to text alerts to the group from the Messages app on this Mac, default `false` |
+| `alert_chat_guid` | the group's `guid` from chat.db, e.g. `any;+;7a12...` (needed for texting) |
 
 Changes take effect on the next poll, no restart needed (except `port`).
 
