@@ -14,8 +14,8 @@ def seed(con):
         dd = d + timedelta(days=i)
         if dd.weekday() < 5:
             rows.append(("TEST", dd.isoformat(), 10, 10.2, 9.8, 10, 1_000_000))
-    con.executemany("INSERT OR REPLACE INTO prices VALUES (?,?,?,?,?,?,?)", rows)
-    con.execute("INSERT OR REPLACE INTO latest VALUES ('TEST', 11.0, ?, 'Test Co')", (today.isoformat(),))
+    con.executemany("INSERT OR REPLACE INTO prices(ticker,date,open,high,low,close,volume) VALUES (?,?,?,?,?,?,?)", rows)
+    con.execute("INSERT OR REPLACE INTO latest(ticker,price,as_of,name) VALUES ('TEST', 11.0, ?, 'Test Co')", (today.isoformat(),))
     con.commit()
 
 def test_alert_move_dedupe_and_hit():
@@ -29,7 +29,7 @@ def test_alert_move_dedupe_and_hit():
         assert again == [], again
         # target 12 hit -> judge then alert
         con.execute("UPDATE latest SET price=12.5 WHERE ticker='TEST'")
-        con.execute("INSERT OR REPLACE INTO prices VALUES ('TEST', ?, 12, 12.6, 11.9, 12.5, 1000000)", (date.today().isoformat(),))
+        con.execute("INSERT OR REPLACE INTO prices(ticker,date,open,high,low,close,volume) VALUES ('TEST', ?, 12, 12.6, 11.9, 12.5, 1000000)", (date.today().isoformat(),))
         from tracker import judge
         judge.judge_all(con)
         new = alerts.check(con, cfg)

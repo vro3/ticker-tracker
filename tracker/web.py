@@ -49,7 +49,11 @@ def health(con=None):
                   "price_rows": con.execute("SELECT COUNT(*) AS n FROM prices").fetchone()["n"],
                   "alerts": con.execute("SELECT COUNT(*) AS n FROM alerts").fetchone()["n"]}
         poll_age = age(last_poll)
-        ok = poll_age is not None and poll_age < 600
+        try:
+            poll_seconds = int(config.load().get("poll_seconds", 30))
+        except Exception:
+            poll_seconds = 30
+        ok = poll_age is not None and poll_age < max(600, poll_seconds * 5)
         return {"ok": ok, "last_poll": last_poll, "poll_age_s": poll_age, "last_price_refresh": last_prices,
                 "price_age_s": age(last_prices), "last_intraday_bar": last_intraday, "last_error": db.get_meta(con, "last_error"),
                 "counts": counts, "server_time": now.isoformat()}

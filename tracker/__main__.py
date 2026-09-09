@@ -28,6 +28,7 @@ def cmd_run(args):
     last_prices = 0
     last_quotes = 0
     last_intraday = 0
+    last_ingest = 0
     log = logging.getLogger("tracker")
     log.info("running: poll every %ss, prices every %sm, quotes every %ss in market hours, home %s",
              cfg["poll_seconds"], cfg["price_refresh_minutes"], cfg.get("quote_refresh_seconds", 30), config.APP_HOME)
@@ -36,13 +37,15 @@ def cmd_run(args):
             cfg = config.load()
         except Exception as e:
             log.error("config.json unreadable, keeping last good config: %s", e)
-        try:
-            pipeline.ingest(cfg)
-            with db.tx() as con:
-                db.set_meta(con, "last_poll", datetime.now().astimezone().isoformat())
-        except Exception as e:
-            log.error("ingest failed: %s", e)
-            _note_error(e)
+        if time.time() - last_ingest >= cfg.get("poll_seconds", 30):
+            try:
+                pipeline.ingest(cfg)
+                with db.tx() as con:
+                    db.set_meta(con, "last_poll", datetime.now().astimezone().isoformat())
+            except Exception as e:
+                log.error("ingest failed: %s", e)
+                _note_error(e)
+            last_ingest = time.time()
         if time.time() - last_prices > cfg["price_refresh_minutes"] * 60:
             try:
                 pipeline.refresh_prices()
@@ -52,7 +55,7 @@ def cmd_run(args):
                 log.error("price refresh failed: %s", e)
                 _note_error(e)
             last_prices = last_quotes = time.time()
-        elif prices.market_open_now() and time.time() - last_quotes >= cfg.get("quote_refresh_seconds", 30):
+        if prices.market_open_now() and time.time() - last_quotes >= cfg.get("quote_refresh_seconds", 30):
             try:
                 pipeline.refresh_quotes()
                 with db.tx() as con:
@@ -68,7 +71,7 @@ def cmd_run(args):
                 log.error("intraday refresh failed: %s", e)
                 _note_error(e)
             last_intraday = time.time()
-        time.sleep(max(5, int(cfg.get("poll_seconds", 30))))
+        time.sleep(max(5, min(int(cfg.get("poll_seconds", 30)), int(cfg.get("quote_refresh_seconds", 30)))))
 
 
 def _note_error(e):

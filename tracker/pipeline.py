@@ -23,14 +23,15 @@ def record_submission(con, cfg, *, sent_at, sender_handle, sender_name, chat_nam
     """override lets a human supply ticker/price directly and skip the vision step."""
     sent_date = sent_at.date().isoformat()
     stamp = sent_at.strftime("%Y%m%d-%H%M%S")
-    staged = imessage.stage_image(image, f"{stamp}-{sender_name}".replace(" ", "_")) if image else None
     row = {
         "msg_rowid": msg_rowid, "sent_at": sent_at.isoformat(), "sent_date": sent_date,
         "sender_handle": sender_handle, "sender_name": sender_name, "chat_name": chat_name,
-        "screenshot": staged.name if staged else None, "note": caption or None,
+        "screenshot": None, "note": caption or None,
         "status": "ok", "created_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
+        staged = imessage.stage_image(image, f"{stamp}-{sender_name}".replace(" ", "_")) if image else None
+        row["screenshot"] = staged.name if staged else None
         data = override if override else vision.extract(cfg, staged, caption)
         row.update({
             "ticker": _clean_ticker(data.get("ticker")),
@@ -79,9 +80,14 @@ def ingest(cfg):
         try:
             record_submission(con, cfg, sent_at=m.sent_at, sender_handle=m.handle, sender_name=name,
                               chat_name=m.chat_name, image=image, caption=m.caption, msg_rowid=m.rowid)
+            n += 1
+        except Exception as e:
+            log.error("message %s not recorded (%s); will retry next poll", m.rowid, e)
+            with db.tx() as c2:                            # unclaim so the next poll retries it
+                c2.execute("DELETE FROM seen_messages WHERE msg_rowid=?", (m.rowid,))
+            break                                          # do not advance the high-water mark past it
         finally:
             con.close()
-        n += 1
     with db.tx() as con:
         if high > after:
             db.set_meta(con, "last_msg_rowid", high)

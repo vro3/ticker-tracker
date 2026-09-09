@@ -97,6 +97,40 @@ def test_ta_helpers_survive_none():
     v = ta.volume_split(bars)
     assert v["buy_pct"] is None or isinstance(v["buy_pct"], float)
 
+def test_ingest_failure_paths():
+    """Staging failure -> recorded as status=error (not lost). Recording failure -> message unclaimed and retried."""
+    from tracker import pipeline, db as _db
+    from datetime import datetime
+    class M:  # minimal stand-in for imessage.Message
+        rowid = 424242; handle = "+1"; images = ["/nonexistent/path.png"]; caption = "x"; chat_name = "t"
+        sent_at = datetime.now().astimezone()
+    orig_collect, orig_stage, orig_record = pipeline.imessage.collect_new, pipeline.imessage.stage_image, pipeline.record_submission
+    pipeline.imessage.collect_new = lambda cfg, after: ([M()], 424242)
+    def boom(*a, **k): raise RuntimeError("stage failed")
+    pipeline.imessage.stage_image = boom
+    cfg = {"chat_db": "/dev/null", "timezone": "America/Chicago", "people": {}, "vision_backend": "cli"}
+    try:
+        with _db.tx() as con:
+            _db.set_meta(con, "last_msg_rowid", 1)
+            con.execute("DELETE FROM seen_messages WHERE msg_rowid=424242")
+        n = pipeline.ingest(cfg)
+        with _db.tx() as con:
+            row = con.execute("SELECT status FROM submissions WHERE msg_rowid=424242").fetchone()
+        assert n == 1 and row and row["status"] == "error", (n, row)
+        # now a hard failure inside record_submission: must unclaim and hold the high-water mark
+        with _db.tx() as con:
+            con.execute("DELETE FROM submissions WHERE msg_rowid=424242")
+            con.execute("DELETE FROM seen_messages WHERE msg_rowid=424242")
+            _db.set_meta(con, "last_msg_rowid", 1)
+        pipeline.record_submission = boom
+        n = pipeline.ingest(cfg)
+        with _db.tx() as con:
+            seen = con.execute("SELECT 1 FROM seen_messages WHERE msg_rowid=424242").fetchone()
+            hw = int(_db.get_meta(con, "last_msg_rowid"))
+        assert n == 0 and seen is None and hw == 1, (n, seen, hw)
+    finally:
+        pipeline.imessage.collect_new, pipeline.imessage.stage_image, pipeline.record_submission = orig_collect, orig_stage, orig_record
+
 if __name__ == "__main__":
     import sys
     fails = 0

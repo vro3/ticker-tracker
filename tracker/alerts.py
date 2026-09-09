@@ -37,11 +37,11 @@ def _add(con, ticker, kind, message, dedupe_key):
     if db.get_meta(con, dedupe_key):
         return None
     now = datetime.now(timezone.utc).isoformat()
-    con.execute("INSERT INTO alerts(ticker, kind, message, created_at, sent) VALUES (?,?,?,?,0)",
-                (ticker, kind, message, now))
+    cur = con.execute("INSERT INTO alerts(ticker, kind, message, created_at, sent) VALUES (?,?,?,?,0)",
+                      (ticker, kind, message, now))
     db.set_meta(con, dedupe_key, now)
     log.info("alert: %s", message)
-    return {"ticker": ticker, "kind": kind, "message": message}
+    return {"id": cur.lastrowid, "ticker": ticker, "kind": kind, "message": message}
 
 
 def check(con, cfg):
@@ -63,7 +63,7 @@ def check(con, cfg):
     if new and cfg.get("alert_imessage") and cfg.get("alert_chat_guid"):
         for a in new:
             if send_imessage(cfg["alert_chat_guid"], a["message"]):
-                con.execute("UPDATE alerts SET sent=1 WHERE message=? AND sent=0", (a["message"],))
+                con.execute("UPDATE alerts SET sent=1 WHERE id=?", (a["id"],))
         con.commit()
     return new
 
@@ -78,6 +78,8 @@ def _prune_meta(con):
             old.append((r["key"],))
     if old:
         con.executemany("DELETE FROM meta WHERE key=?", old)
+    # hit keys: drop when the submission no longer exists (deleted from the dashboard)
+    con.execute("DELETE FROM meta WHERE key LIKE 'alert:hit:%' AND CAST(substr(key, 11) AS INTEGER) NOT IN (SELECT id FROM submissions)")
 
 
 def _check_ticker(con, cfg, tk, latest, thr, today, new):

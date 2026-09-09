@@ -43,6 +43,8 @@ def fetch_5m(tickers):
 
 def store(con, data):
     for tk, bars in data.items():
+        if not bars:
+            continue                                       # keep yesterday's bars rather than wiping them
         con.execute("DELETE FROM intraday WHERE ticker=?", (tk,))
         con.executemany("INSERT OR REPLACE INTO intraday(ticker, ts, open, high, low, close, volume) VALUES (?,?,?,?,?,?,?)",
                         [(tk, b["ts"], b["open"], b["high"], b["low"], b["close"], b["volume"]) for b in bars])

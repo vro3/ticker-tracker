@@ -23,19 +23,21 @@ def fetch_history(ticker: str, start: date):
     return rows
 
 
-def fetch_latest(ticker: str):
+def fetch_latest(ticker: str, known_name: str | None = None):
     yf = _yf()
     t = yf.Ticker(ticker)
-    price, name = None, None
+    price, name = None, known_name
     try:
         fi = t.fast_info
         price = float(fi["last_price"]) if fi and fi["last_price"] else None
     except Exception:
         price = None
-    try:
-        name = t.info.get("shortName") or t.info.get("longName")
-    except Exception:
-        name = None
+    if not name:
+        try:
+            info = t.info                      # slow scrape; only when we have no name yet
+            name = info.get("shortName") or info.get("longName")
+        except Exception:
+            name = None
     if price is None:
         df = t.history(period="5d", interval="1d")
         if len(df):
@@ -98,6 +100,11 @@ def refresh_quotes(con):
     return len(quotes)
 
 
+def db_meta_backfilled(con, tk) -> bool:
+    """True once a full-history fetch has been done for tk (so short-history names stop re-downloading)."""
+    return con.execute("SELECT 1 FROM meta WHERE key=?", (f"backfilled:{tk}",)).fetchone() is not None
+
+
 def refresh(con, tickers=None):
     """Fill in daily closes since each ticker's earliest submission and update latest prices."""
     if tickers is None:
@@ -112,12 +119,14 @@ def refresh(con, tickers=None):
                 continue
             start = date.fromisoformat(first) - timedelta(days=HISTORY_DAYS)
             have = con.execute("SELECT COUNT(*) AS n FROM prices WHERE ticker=?", (tk,)).fetchone()["n"]
-            if last and have >= 200:
+            if last and (have >= 200 or db_meta_backfilled(con, tk)):
                 start = max(start, date.fromisoformat(last) - timedelta(days=3))
             rows = fetch_history(tk, start)
-            price, name = fetch_latest(tk)       # all network done before touching the DB
+            known = con.execute("SELECT name FROM latest WHERE ticker=?", (tk,)).fetchone()
+            price, name = fetch_latest(tk, known["name"] if known else None)   # network before DB writes
             con.executemany(
                 "INSERT OR REPLACE INTO prices(ticker,date,open,high,low,close,volume) VALUES (?,?,?,?,?,?,?)", rows)
+            con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, '1')", (f"backfilled:{tk}",))
             if price is not None:
                 con.execute("INSERT OR REPLACE INTO latest(ticker,price,as_of,name) VALUES (?,?,?,?)",
                             (tk, price, datetime.now(timezone.utc).isoformat(), name))
