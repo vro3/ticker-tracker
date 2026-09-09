@@ -13,6 +13,31 @@ log = logging.getLogger("tracker")
 TICKER_RE = re.compile(r"^[A-Z0-9.\-]{1,10}$")
 
 
+def _num(x):
+    """Model output -> float or None; never a list/dict that would blow up the INSERT."""
+    try:
+        if isinstance(x, bool) or x is None:
+            return None
+        if isinstance(x, (int, float)):
+            return float(x)
+        if isinstance(x, str):
+            return float(x.replace("$", "").replace(",", "").strip())
+    except ValueError:
+        pass
+    return None
+
+
+def _int(x):
+    v = _num(x)
+    return int(v) if v is not None else None
+
+
+def _text(x, limit):
+    if x is None or isinstance(x, (dict, list)):
+        return None
+    return str(x)[:limit]
+
+
 def _clean_ticker(raw) -> str | None:
     t = (str(raw) if raw is not None else "").upper().strip().lstrip("$")
     return t if TICKER_RE.match(t) else None
@@ -33,13 +58,18 @@ def record_submission(con, cfg, *, sent_at, sender_handle, sender_name, chat_nam
         staged = imessage.stage_image(image, f"{stamp}-{sender_name}".replace(" ", "_")) if image else None
         row["screenshot"] = staged.name if staged else None
         data = override if override else vision.extract(cfg, staged, caption)
+        if not isinstance(data, dict):
+            raise ValueError(f"extractor returned {type(data).__name__}, not an object")
         row.update({
             "ticker": _clean_ticker(data.get("ticker")),
-            "company": data.get("company"), "price_seen": data.get("price"), "currency": data.get("currency"),
-            "goal": data.get("goal"), "direction": data.get("direction") or "unknown",
-            "target_price": data.get("target_price"), "horizon_days": data.get("horizon_days"),
-            "confidence": data.get("confidence"), "extraction_json": json.dumps(data),
+            "company": _text(data.get("company"), 120), "price_seen": _num(data.get("price")),
+            "currency": _text(data.get("currency"), 8),
+            "goal": _text(data.get("goal"), 500), "direction": _text(data.get("direction"), 10) or "unknown",
+            "target_price": _num(data.get("target_price")), "horizon_days": _int(data.get("horizon_days")),
+            "confidence": _num(data.get("confidence")), "extraction_json": json.dumps(data)[:4000],
         })
+        if row["direction"] not in ("up", "down", "watch", "unknown"):
+            row["direction"] = "unknown"
         if not row["ticker"] or (row["confidence"] or 0) < 0.5:
             row["status"] = "needs_review"
         elif not prices.validate_ticker(row["ticker"]):
@@ -74,6 +104,10 @@ def ingest(cfg):
                 continue
             con.execute("INSERT INTO seen_messages(msg_rowid, seen_at) VALUES (?,?)",
                         (m.rowid, datetime.now(timezone.utc).isoformat()))
+            cap_rowid = getattr(m, "caption_rowid", None)
+            if cap_rowid:                                  # the caption text is spoken for; never a standalone entry
+                con.execute("INSERT OR IGNORE INTO seen_messages(msg_rowid, seen_at) VALUES (?,?)",
+                            (cap_rowid, datetime.now(timezone.utc).isoformat()))
         name = imessage.sender_name(cfg, m.handle)
         image = m.images[0] if m.images else None
         con = db.connect()                                 # vision runs on this connection before any write
@@ -85,7 +119,9 @@ def ingest(cfg):
             log.error("message %s not recorded (%s); will retry next poll", m.rowid, e)
             with db.tx() as c2:                            # unclaim so the next poll retries it
                 c2.execute("DELETE FROM seen_messages WHERE msg_rowid=?", (m.rowid,))
-            high = min(high, m.rowid - 1)                  # hold the high-water mark before this message
+                if cap_rowid:
+                    c2.execute("DELETE FROM seen_messages WHERE msg_rowid=?", (cap_rowid,))
+            high = min(high, m.rowid - 1, (cap_rowid or m.rowid) - 1)   # hold the mark before message and caption
             break
         finally:
             con.close()

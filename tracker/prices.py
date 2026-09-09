@@ -126,7 +126,8 @@ def refresh(con, tickers=None):
             price, name = fetch_latest(tk, known["name"] if known else None)   # network before DB writes
             con.executemany(
                 "INSERT OR REPLACE INTO prices(ticker,date,open,high,low,close,volume) VALUES (?,?,?,?,?,?,?)", rows)
-            con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, '1')", (f"backfilled:{tk}",))
+            if rows:                                        # only count a fetch that actually returned history
+                con.execute("INSERT OR REPLACE INTO meta(key, value) VALUES (?, '1')", (f"backfilled:{tk}",))
             if price is not None:
                 con.execute("INSERT OR REPLACE INTO latest(ticker,price,as_of,name) VALUES (?,?,?,?)",
                             (tk, price, datetime.now(timezone.utc).isoformat(), name))

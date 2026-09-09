@@ -95,7 +95,10 @@ def _extract_cli(cfg: dict, image: Path | None, caption: str) -> dict:
     else:
         prompt = "There is no screenshot, only a text message. Extract the ticker from the text.\n\n" + prompt
     prompt += "\n\nRespond with ONLY a JSON object matching this schema, no prose, no code fences:\n" + json.dumps(SCHEMA)
-    cmd = [claude, "-p", prompt, "--output-format", "json", "--allowedTools", "Read"]
+    from . import config as _cfg
+    scope = f"Read({_cfg.SCREENSHOT_DIR}/**)" if image is not None else "Read(/nonexistent/**)"
+    cmd = [claude, "-p", prompt, "--output-format", "json", "--allowedTools", scope,
+           "--disallowedTools", "Bash,Edit,Write,WebFetch,WebSearch,Agent,Glob,Grep"]
     if cfg.get("model"):
         cmd += ["--model", cfg["model"]]
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=300)

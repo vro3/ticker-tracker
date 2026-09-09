@@ -125,6 +125,7 @@ class Message:
         self.reaction = bool(row["associated_message_type"])
         self.images = []
         self.caption = ""
+        self.caption_rowid = None      # rowid of a separate text message used as this picture's caption
         self.consumed = False
         self.skip = False
 
@@ -194,6 +195,7 @@ def _find_caption(msgs, i):
             best = (dt, other)
     if best:
         best[1].consumed = True
+        me.caption_rowid = best[1].rowid
         return best[1].text
     return ""
 

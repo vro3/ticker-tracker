@@ -49,6 +49,42 @@ def test_unknown_ticker_grade_none():
     g = ta.grade([], None)
     assert g["grade"] is None
 
+def test_alert_sent_marked_by_id_and_coercion():
+    from tracker import alerts, pipeline
+    sent = []
+    orig = alerts.send_imessage
+    alerts.send_imessage = lambda guid, text: sent.append(text) or True
+    try:
+        with db.tx() as con:
+            con.execute("DELETE FROM alerts"); con.execute("DELETE FROM meta WHERE key LIKE 'alert:%'")
+            cfg = dict(config.DEFAULTS, alert_move_pct=1, alert_imessage=True, alert_chat_guid="x")
+            new = alerts.check(con, cfg)
+            assert new and all("id" in a for a in new)
+            rows = con.execute("SELECT id, sent FROM alerts").fetchall()
+            assert all(r["sent"] == 1 for r in rows) and len(sent) == len(rows)
+    finally:
+        alerts.send_imessage = orig
+    assert pipeline._num({"value": 1}) is None and pipeline._num("$1,234.5") == 1234.5 and pipeline._int("3") == 3
+    assert pipeline._text(["a"], 10) is None and pipeline._text("x" * 20, 5) == "xxxxx"
+
+def test_backfill_flag_only_with_rows():
+    from tracker import prices
+    orig_h, orig_l = prices.fetch_history, prices.fetch_latest
+    prices.fetch_history = lambda tk, start: []
+    prices.fetch_latest = lambda tk, known_name=None: (None, None)
+    try:
+        with db.tx() as con:
+            con.execute("DELETE FROM meta WHERE key='backfilled:TEST'")
+            prices.refresh(con, ["TEST"])
+            assert not prices.db_meta_backfilled(con, "TEST")
+        prices.fetch_history = lambda tk, start: [("TEST", "2020-01-02", 1, 1, 1, 1, 1)]
+        with db.tx() as con:
+            prices.refresh(con, ["TEST"])
+            assert prices.db_meta_backfilled(con, "TEST")
+    finally:
+        prices.fetch_history, prices.fetch_latest = orig_h, orig_l
+
+
 if __name__ == "__main__":
     import sys
     fails = 0

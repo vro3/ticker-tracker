@@ -1,4 +1,6 @@
 """Run: .venv/bin/python -m tests.test_intraday"""
+import os, tempfile
+os.environ.setdefault("TICKER_TRACKER_HOME", tempfile.mkdtemp(prefix="tt-intra-"))
 from tracker import intraday
 
 def mk(ts, o, h, l, c, v=100):
@@ -28,6 +30,19 @@ def test_setups_shape():
     bars = [mk(f"2026-09-08T{9 + (i*5+30)//60:02d}:{(i*5+30)%60:02d}:00-04:00", 10, 10.1, 9.9, 10 + i * 0.01) for i in range(60)]
     s = intraday.setups(bars)
     assert s["ok"] and set(s) >= {"m5", "m15_gaps", "ftfc"} and s["ftfc"]["full"] in ("green", "red", "mixed", None)
+
+def test_store_keeps_old_bars_on_empty_fetch():
+    import os, tempfile
+    os.environ.setdefault("TICKER_TRACKER_HOME", tempfile.mkdtemp(prefix="tt-intra-"))
+    from tracker import db
+    with db.tx() as con:
+        intraday.store(con, {"ZZZ": [mk("2026-09-08T09:30:00-04:00", 1, 1, 1, 1)]})
+        assert len(intraday.load(con, "ZZZ")) == 1
+        intraday.store(con, {"ZZZ": []})
+        assert len(intraday.load(con, "ZZZ")) == 1
+        intraday.store(con, {"ZZZ": [mk("2026-09-08T09:35:00-04:00", 2, 2, 2, 2), mk("2026-09-08T09:40:00-04:00", 3, 3, 3, 3)]})
+        assert len(intraday.load(con, "ZZZ")) == 2
+
 
 if __name__ == "__main__":
     import sys
