@@ -21,7 +21,7 @@ def fetch_5m(tickers):
         return out
     try:
         df = yf.download(list(tickers), period="5d", interval="5m", group_by="ticker",
-                         progress=False, threads=True, prepost=False)
+                         progress=False, threads=False, prepost=False)
     except Exception as e:
         log.warning("5m download failed: %s", e)
         return out

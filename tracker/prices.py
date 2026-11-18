@@ -61,7 +61,7 @@ def fetch_quotes(tickers):
         return out
     try:
         df = yf.download(list(tickers), period="1d", interval="1m", group_by="ticker",
-                         progress=False, threads=True, prepost=True)
+                         progress=False, threads=False, prepost=True)
         multi = hasattr(df.columns, "levels")
         for tk in tickers:
             try:
